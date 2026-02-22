@@ -1,6 +1,6 @@
 # QuickNote
 
-An Android note-taking app where you can create notes, organize them into folders, and add photos to your notes. 
+An Android note-taking app where you can create notes, organize them into folders, add photos to your notes, and create whiteboards. 
 The app is designed to be simple and intuitive, making it easy to jot down ideas and keep everything organized.
 
 ---

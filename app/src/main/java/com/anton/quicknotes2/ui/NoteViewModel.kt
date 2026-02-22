@@ -29,8 +29,13 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun reorderNotesInFolder(notes: List<Note>) =
         viewModelScope.launch { repository.reorderNotesInFolder(notes) }
 
+    fun reorderFolderContents(items: List<com.anton.quicknotes2.ui.FolderItem>) =
+        viewModelScope.launch { repository.reorderFolderContents(items) }
+
     // ── Folders ────────────────────────────────────────────
     val allFolders: LiveData<List<Folder>> = repository.allFolders
+
+    fun getSubFolders(parentId: Int) = repository.getSubFolders(parentId)
 
     fun insertFolder(folder: Folder) = viewModelScope.launch { repository.insertFolder(folder) }
     fun updateFolder(folder: Folder) = viewModelScope.launch { repository.updateFolder(folder) }

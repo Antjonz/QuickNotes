@@ -2,20 +2,27 @@ package com.anton.quicknotes2
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.LayoutInflater
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.NoteDatabase
 import com.anton.quicknotes2.data.NoteRepository
 import com.anton.quicknotes2.databinding.ActivityFolderBinding
+import com.anton.quicknotes2.databinding.DialogNewFolderBinding
 import com.anton.quicknotes2.ui.FolderAdapter
+import com.anton.quicknotes2.ui.FolderItem
 import com.anton.quicknotes2.ui.NoteViewModel
 import com.anton.quicknotes2.ui.NoteViewModelFactory
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.launch
 
 class FolderActivity : AppCompatActivity() {
 
@@ -30,10 +37,23 @@ class FolderActivity : AppCompatActivity() {
     private var isDragging = false
     private var pendingIconNoteId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
+    private var pendingIconSubFolderId: Int? = null
+
+    // Drag-into-subfolder state
+    private var highlightedCard: MaterialCardView? = null
+    private var pendingSubFolderTarget: Pair<FolderItem, Folder>? = null
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
         NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao()))
+    }
+
+    private fun setCardHighlight(card: MaterialCardView?) {
+        highlightedCard?.strokeColor = android.graphics.Color.TRANSPARENT
+        highlightedCard?.strokeWidth = 0
+        highlightedCard = card
+        card?.strokeColor = 0xFF6650A4.toInt()
+        card?.strokeWidth = 6
     }
 
     private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -41,6 +61,7 @@ class FolderActivity : AppCompatActivity() {
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
+        pendingIconSubFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconSubFolderId = null }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,13 +103,21 @@ class FolderActivity : AppCompatActivity() {
                     .setPositiveButton("Delete") { _, _ -> viewModel.deleteWhiteboard(wb) }
                     .setNegativeButton("Cancel", null).show()
             },
-            onWhiteboardIconClick = { wb -> pendingIconWhiteboardId = wb.id; pickIcon.launch("image/*") }
+            onWhiteboardIconClick = { wb -> pendingIconWhiteboardId = wb.id; pickIcon.launch("image/*") },
+            onSubFolderClick = { folder ->
+                startActivity(Intent(this, FolderActivity::class.java).apply {
+                    putExtra(EXTRA_FOLDER_ID, folder.id)
+                    putExtra(EXTRA_FOLDER_NAME, folder.name)
+                })
+            },
+            onSubFolderDelete = { folder -> showDeleteFolderDialog(folder) },
+            onSubFolderIconClick = { folder -> pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
 
-        var pendingMoveOut: com.anton.quicknotes2.ui.FolderItem? = null
+        var pendingMoveOut: FolderItem? = null
 
         val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
@@ -100,8 +129,44 @@ class FolderActivity : AppCompatActivity() {
                 val to = target.bindingAdapterPosition
                 if (from == 0) return false
 
+                val draggedItem = adapter.getFolderItemAt(from)
+                val targetItem = adapter.getFolderItemAt(to)
                 val isCancelRow = adapter.isDragging && to == adapter.itemCount - 1
+
                 if (isCancelRow) {
+                    if (dragOutView != null) {
+                        dragOutView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        dragOutView = null
+                        pendingMoveOut = null
+                    }
+                    setCardHighlight(null)
+                    pendingSubFolderTarget = null
+                    return false
+                }
+
+                // Hovering over drag-out row → move out of current folder
+                if (to == 0) {
+                    setCardHighlight(null)
+                    pendingSubFolderTarget = null
+                    if (dragOutView == null) {
+                        target.itemView.setBackgroundColor(0x1A6650A4.toInt())
+                        dragOutView = target.itemView
+                        pendingMoveOut = draggedItem
+                    }
+                    return false
+                }
+
+                // Draggable item hovering over a sub-folder → highlight to drop into it
+                val isDraggable = draggedItem is FolderItem.NoteItem ||
+                                  draggedItem is FolderItem.WhiteboardItem ||
+                                  draggedItem is FolderItem.SubFolderItem
+                if (isDraggable && targetItem is FolderItem.SubFolderItem &&
+                    (draggedItem !is FolderItem.SubFolderItem || draggedItem.folder.id != targetItem.folder.id)) {
+                    val card = target.itemView as? MaterialCardView
+                    if (card != highlightedCard) {
+                        setCardHighlight(card)
+                        pendingSubFolderTarget = Pair(draggedItem!!, targetItem.folder)
+                    }
                     if (dragOutView != null) {
                         dragOutView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         dragOutView = null
@@ -110,21 +175,14 @@ class FolderActivity : AppCompatActivity() {
                     return false
                 }
 
-                if (to == 0) {
-                    if (dragOutView == null) {
-                        target.itemView.setBackgroundColor(0x1A6650A4.toInt())
-                        dragOutView = target.itemView
-                        pendingMoveOut = adapter.getFolderItemAt(from)
-                    }
-                    return false
-                }
-
+                // Normal reorder
+                setCardHighlight(null)
+                pendingSubFolderTarget = null
                 if (dragOutView != null) {
                     dragOutView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     dragOutView = null
                     pendingMoveOut = null
                 }
-
                 isDragging = true
                 adapter.moveItem(from, to)
                 return true
@@ -142,18 +200,34 @@ class FolderActivity : AppCompatActivity() {
                 adapter.isDragging = false
                 dragOutView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 dragOutView = null
-                val pending = pendingMoveOut
+                setCardHighlight(null)
+                val moveOut = pendingMoveOut
+                val moveInto = pendingSubFolderTarget
                 pendingMoveOut = null
+                pendingSubFolderTarget = null
                 isDragging = false
-                if (pending != null) {
-                    when (pending) {
-                        is com.anton.quicknotes2.ui.FolderItem.NoteItem ->
-                            viewModel.update(pending.note.copy(folderId = null))
-                        is com.anton.quicknotes2.ui.FolderItem.WhiteboardItem ->
-                            viewModel.updateWhiteboard(pending.wb.copy(folderId = null))
+                when {
+                    moveInto != null -> {
+                        val (item, targetFolder) = moveInto
+                        when (item) {
+                            is FolderItem.NoteItem -> viewModel.update(item.note.copy(folderId = targetFolder.id))
+                            is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(item.wb.copy(folderId = targetFolder.id))
+                            is FolderItem.SubFolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = targetFolder.id))
+                        }
                     }
-                } else {
-                    viewModel.reorderNotesInFolder(adapter.getItems())
+                    moveOut != null -> {
+                        // Move up one level (to grandparent, or root if we're at level 1)
+                        lifecycleScope.launch {
+                            val parent = viewModel.getFolderById(folderId)
+                            val grandParentId = parent?.parentFolderId
+                            when (moveOut) {
+                                is FolderItem.NoteItem -> viewModel.update(moveOut.note.copy(folderId = grandParentId))
+                                is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(moveOut.wb.copy(folderId = grandParentId))
+                                is FolderItem.SubFolderItem -> viewModel.updateFolder(moveOut.folder.copy(parentFolderId = grandParentId))
+                            }
+                        }
+                    }
+                    else -> viewModel.reorderFolderContents(adapter.getAllItems())
                 }
             }
 
@@ -162,33 +236,51 @@ class FolderActivity : AppCompatActivity() {
         touchHelper.attachToRecyclerView(binding.recyclerView)
         adapter.itemTouchHelper = touchHelper
 
-        // Observe both notes and whiteboards
         var latestNotes = emptyList<com.anton.quicknotes2.data.Note>()
         var latestWhiteboards = emptyList<com.anton.quicknotes2.data.Whiteboard>()
+        var latestSubFolders = emptyList<Folder>()
 
-        viewModel.getNotesInFolder(folderId).observe(this) { notes ->
-            latestNotes = notes
+        fun refresh() {
             if (!isDragging) {
-                adapter.submitMixed(latestNotes, latestWhiteboards)
-                binding.emptyText.visibility =
-                    if (latestNotes.isEmpty() && latestWhiteboards.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders)
+                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() && latestSubFolders.isEmpty()
+                binding.emptyText.visibility = if (empty) android.view.View.VISIBLE else android.view.View.GONE
             }
         }
-        viewModel.getWhiteboardsInFolder(folderId).observe(this) { wbs ->
-            latestWhiteboards = wbs
-            if (!isDragging) {
-                adapter.submitMixed(latestNotes, latestWhiteboards)
-                binding.emptyText.visibility =
-                    if (latestNotes.isEmpty() && latestWhiteboards.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-            }
-        }
+
+        viewModel.getNotesInFolder(folderId).observe(this) { latestNotes = it; refresh() }
+        viewModel.getWhiteboardsInFolder(folderId).observe(this) { latestWhiteboards = it; refresh() }
+        viewModel.getSubFolders(folderId).observe(this) { latestSubFolders = it; refresh() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
 
+    private fun showDeleteFolderDialog(folder: Folder) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Delete folder")
+            .setMessage("Are you sure you want to delete \"${folder.name}\"?")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    val count = viewModel.getFolderItemCount(folder.id)
+                    if (count == 0) {
+                        viewModel.deleteFolder(folder)
+                    } else {
+                        MaterialAlertDialogBuilder(this@FolderActivity)
+                            .setTitle("What about the items inside?")
+                            .setMessage("\"${folder.name}\" contains $count item${if (count == 1) "" else "s"}. Delete them all, or move them here?")
+                            .setPositiveButton("Delete all") { _, _ -> viewModel.deleteFolderAndNotes(folder) }
+                            .setNegativeButton("Move here") { _, _ -> viewModel.deleteFolderMoveNotesOut(folder) }
+                            .setNeutralButton("Cancel", null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
     private fun showFabMenu() {
         val sheet = BottomSheetDialog(this)
-        val sheetView = layoutInflater.inflate(R.layout.bottom_sheet_fab, null)
+        val sheetView = LayoutInflater.from(this).inflate(R.layout.bottom_sheet_fab, null)
         sheet.setContentView(sheetView)
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewNote).setOnClickListener {
             sheet.dismiss()
@@ -202,9 +294,23 @@ class FolderActivity : AppCompatActivity() {
                 putExtra(WhiteboardEditorActivity.EXTRA_FOLDER_ID, folderId)
             })
         }
-        // Hide "New folder" option inside a folder
-        sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).visibility = android.view.View.GONE
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {
+            sheet.dismiss()
+            showNewSubFolderDialog()
+        }
         sheet.show()
+    }
+
+    private fun showNewSubFolderDialog() {
+        val dialogBinding = DialogNewFolderBinding.inflate(LayoutInflater.from(this))
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.new_folder)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.create) { _, _ ->
+                val name = dialogBinding.editFolderName.text.toString().trim()
+                if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name, parentFolderId = folderId))
+            }
+            .setNegativeButton(android.R.string.cancel, null).show()
     }
 
     override fun onSupportNavigateUp(): Boolean {

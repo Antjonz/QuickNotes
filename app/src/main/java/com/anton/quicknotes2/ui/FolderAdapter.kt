@@ -7,8 +7,10 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.Whiteboard
+import com.anton.quicknotes2.databinding.ItemFolderBinding
 import com.anton.quicknotes2.databinding.ItemNoteBinding
 import com.anton.quicknotes2.databinding.ItemWhiteboardBinding
 import java.text.SimpleDateFormat
@@ -18,6 +20,7 @@ import java.util.*
 sealed class FolderItem {
     data class NoteItem(val note: Note) : FolderItem()
     data class WhiteboardItem(val wb: Whiteboard) : FolderItem()
+    data class SubFolderItem(val folder: Folder) : FolderItem()
 }
 
 class FolderAdapter(
@@ -28,7 +31,10 @@ class FolderAdapter(
     val onMoveOutOfFolder: (Note) -> Unit = {},
     private val onWhiteboardClick: (Whiteboard) -> Unit = {},
     private val onWhiteboardDelete: (Whiteboard) -> Unit = {},
-    private val onWhiteboardIconClick: (Whiteboard) -> Unit = {}
+    private val onWhiteboardIconClick: (Whiteboard) -> Unit = {},
+    private val onSubFolderClick: (Folder) -> Unit = {},
+    private val onSubFolderDelete: (Folder) -> Unit = {},
+    private val onSubFolderIconClick: (Folder) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -36,6 +42,7 @@ class FolderAdapter(
         const val TYPE_NOTE = 1
         const val TYPE_CANCEL = 2
         const val TYPE_WHITEBOARD = 3
+        const val TYPE_FOLDER = 4
     }
 
     // Mixed list of notes and whiteboards
@@ -51,14 +58,18 @@ class FolderAdapter(
             else notifyItemRemoved(cancelPos)
         }
 
-    fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>) {
+    fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder> = emptyList()) {
         val newItems = mutableListOf<FolderItem>()
         notes.forEach { newItems.add(FolderItem.NoteItem(it)) }
         whiteboards.forEach { newItems.add(FolderItem.WhiteboardItem(it)) }
-        newItems.sortBy { when (it) {
-            is FolderItem.NoteItem -> it.note.sortOrder
-            is FolderItem.WhiteboardItem -> it.wb.sortOrder
-        }}
+        subFolders.forEach { newItems.add(FolderItem.SubFolderItem(it)) }
+        newItems.sortBy {
+            when (it) {
+                is FolderItem.NoteItem -> it.note.sortOrder
+                is FolderItem.WhiteboardItem -> it.wb.sortOrder
+                is FolderItem.SubFolderItem -> it.folder.sortOrder
+            }
+        }
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = items.size
             override fun getNewListSize() = newItems.size
@@ -67,6 +78,7 @@ class FolderAdapter(
                 return when {
                     old is FolderItem.NoteItem && new is FolderItem.NoteItem -> old.note.id == new.note.id
                     old is FolderItem.WhiteboardItem && new is FolderItem.WhiteboardItem -> old.wb.id == new.wb.id
+                    old is FolderItem.SubFolderItem && new is FolderItem.SubFolderItem -> old.folder.id == new.folder.id
                     else -> false
                 }
             }
@@ -81,6 +93,7 @@ class FolderAdapter(
     fun submitList(notes: List<Note>) = submitMixed(notes, emptyList())
 
     fun getItems(): List<Note> = items.filterIsInstance<FolderItem.NoteItem>().map { it.note }
+    fun getAllItems(): List<FolderItem> = items.toList()
 
     fun moveItem(from: Int, to: Int) {
         val fromIdx = from - 1
@@ -105,6 +118,7 @@ class FolderAdapter(
         return when (items[position - 1]) {
             is FolderItem.NoteItem -> TYPE_NOTE
             is FolderItem.WhiteboardItem -> TYPE_WHITEBOARD
+            is FolderItem.SubFolderItem -> TYPE_FOLDER
         }
     }
 
@@ -145,6 +159,22 @@ class FolderAdapter(
         }
     }
 
+    inner class SubFolderViewHolder(private val binding: ItemFolderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(folder: Folder) {
+            binding.textFolderName.text = folder.name
+            binding.root.setOnClickListener { onSubFolderClick(folder) }
+            binding.btnDelete.setOnClickListener { onSubFolderDelete(folder) }
+            binding.itemIcon.setOnClickListener { onSubFolderIconClick(folder) }
+            if (folder.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(folder.iconUri))
+            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_folder_default)
+            binding.dragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
+                false
+            }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
@@ -155,6 +185,7 @@ class FolderAdapter(
                 inflater.inflate(com.anton.quicknotes2.R.layout.item_drag_cancel, parent, false)
             ) {}
             TYPE_WHITEBOARD -> WhiteboardViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
+            TYPE_FOLDER -> SubFolderViewHolder(ItemFolderBinding.inflate(inflater, parent, false))
             else -> NoteViewHolder(ItemNoteBinding.inflate(inflater, parent, false))
         }
     }
@@ -164,6 +195,7 @@ class FolderAdapter(
         when (val item = items[position - 1]) {
             is FolderItem.NoteItem -> (holder as? NoteViewHolder)?.bind(item.note)
             is FolderItem.WhiteboardItem -> (holder as? WhiteboardViewHolder)?.bind(item.wb)
+            is FolderItem.SubFolderItem -> (holder as? SubFolderViewHolder)?.bind(item.folder)
         }
     }
 }

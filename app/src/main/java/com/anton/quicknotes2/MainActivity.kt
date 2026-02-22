@@ -145,7 +145,9 @@ class MainActivity : AppCompatActivity() {
                 val draggedItem = adapter.getItemAt(from)
                 val targetItem = adapter.getItemAt(to) // null when to == cancel row
 
-                val isDraggable = draggedItem is HomeItem.NoteItem || draggedItem is HomeItem.WhiteboardItem
+                val isDraggable = draggedItem is HomeItem.NoteItem ||
+                                  draggedItem is HomeItem.WhiteboardItem ||
+                                  draggedItem is HomeItem.FolderItem
 
                 when {
                     // Hovering over cancel row → clear any folder highlight
@@ -156,8 +158,9 @@ class MainActivity : AppCompatActivity() {
                         }
                         return false
                     }
-                    // Note or Whiteboard hovering over a folder → highlight
-                    isDraggable && targetItem is HomeItem.FolderItem -> {
+                    // Note, Whiteboard, or Folder hovering over a different folder → highlight
+                    isDraggable && targetItem is HomeItem.FolderItem &&
+                    (draggedItem !is HomeItem.FolderItem || draggedItem.folder.id != targetItem.folder.id) -> {
                         val card = target.itemView as? MaterialCardView
                         if (card != highlightedCard) {
                             setCardHighlight(card)
@@ -204,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                     when (item) {
                         is HomeItem.NoteItem -> viewModel.update(item.note.copy(folderId = folder.id))
                         is HomeItem.WhiteboardItem -> viewModel.updateWhiteboard(item.whiteboard.copy(folderId = folder.id))
-                        else -> {}
+                        is HomeItem.FolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = folder.id))
                     }
                 } else {
                     viewModel.reorderHomeItems(adapter.getItems())
