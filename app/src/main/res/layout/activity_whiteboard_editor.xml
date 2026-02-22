@@ -17,7 +17,8 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/colorPrimary"
-            app:titleTextColor="@color/white" />
+            app:titleTextColor="@color/white"
+            app:menu="@menu/menu_whiteboard_editor" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -66,15 +67,19 @@
             android:layout_margin="6dp"
             android:background="@drawable/color_swatch_bg" />
 
-        <!-- Pen size slider -->
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+        <!-- Pen button -->
+        <ImageButton
+            android:id="@+id/btnPen"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_margin="4dp"
             android:src="@android:drawable/ic_menu_edit"
-            android:contentDescription="Pen size"
+            android:background="@drawable/tool_selected_bg"
+            android:contentDescription="Pen"
+            android:padding="6dp"
             app:tint="?attr/colorOnSurface" />
 
+        <!-- Pen size slider -->
         <SeekBar
             android:id="@+id/seekPenSize"
             android:layout_width="0dp"
@@ -91,8 +96,9 @@
             android:layout_height="40dp"
             android:layout_margin="4dp"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/tool_selected_bg"
             android:contentDescription="Eraser"
+            android:padding="6dp"
             app:tint="?attr/colorOnSurface" />
 
         <!-- Clear board -->
@@ -104,9 +110,9 @@
             android:src="@android:drawable/ic_menu_delete"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Clear board"
+            android:padding="6dp"
             app:tint="@color/delete_red" />
 
     </LinearLayout>
 
 </LinearLayout>
-

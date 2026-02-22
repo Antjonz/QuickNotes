@@ -3,6 +3,8 @@ package com.anton.quicknotes2
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
@@ -35,9 +37,9 @@ class WhiteboardEditorActivity : AppCompatActivity() {
     private var folderId: Int? = null
     private var savedStrokesJson: String = "[]"
     private var savedTitle: String = ""
+    // true = eraser active, false = pen active
     private var eraserActive = false
 
-    // Available colours
     private val colors = listOf(
         Color.BLACK, Color.DKGRAY, Color.GRAY,
         Color.RED, 0xFFE53935.toInt(), 0xFFFF6D00.toInt(),
@@ -55,7 +57,6 @@ class WhiteboardEditorActivity : AppCompatActivity() {
         whiteboardId = intent.getIntExtra(EXTRA_WHITEBOARD_ID, -1)
         folderId = intent.getIntExtra(EXTRA_FOLDER_ID, -1).takeIf { it != -1 }
 
-        // Load existing whiteboard
         if (whiteboardId != -1) {
             lifecycleScope.launch {
                 val wb = viewModel.getWhiteboardById(whiteboardId) ?: return@launch
@@ -66,13 +67,7 @@ class WhiteboardEditorActivity : AppCompatActivity() {
             }
         }
 
-        // Toolbar save button
-        binding.toolbar.inflateMenu(R.menu.menu_whiteboard_editor)
-        binding.toolbar.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.action_save) { save(); true } else false
-        }
-
-        // Pen size
+        // Pen size slider
         binding.seekPenSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
                 binding.whiteboardView.penWidth = (progress + 1).toFloat()
@@ -82,13 +77,20 @@ class WhiteboardEditorActivity : AppCompatActivity() {
         })
         binding.whiteboardView.penWidth = (binding.seekPenSize.progress + 1).toFloat()
 
+        // Pen button — starts selected
+        setToolSelected(pen = true)
+        binding.btnPen.setOnClickListener {
+            eraserActive = false
+            binding.whiteboardView.isEraser = false
+            setToolSelected(pen = true)
+        }
+
         // Eraser toggle
         binding.btnEraser.setOnClickListener {
-            eraserActive = !eraserActive
-            binding.whiteboardView.isEraser = eraserActive
-            binding.btnEraser.alpha = if (eraserActive) 1f else 0.4f
+            eraserActive = true
+            binding.whiteboardView.isEraser = true
+            setToolSelected(pen = false)
         }
-        binding.btnEraser.alpha = 0.4f
 
         // Clear board
         binding.btnClear.setOnClickListener {
@@ -100,7 +102,7 @@ class WhiteboardEditorActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Color picker
+        // Color picker — also switches back to pen
         updateColorSwatch(binding.whiteboardView.penColor)
         binding.btnColor.setOnClickListener { showColorPicker() }
 
@@ -119,6 +121,32 @@ class WhiteboardEditorActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    /** Highlight the active tool button using the selected state. */
+    private fun setToolSelected(pen: Boolean) {
+        binding.btnPen.isSelected = pen
+        binding.btnEraser.isSelected = !pen
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_whiteboard_editor, menu)
+        // Tint the Save text white so it shows on the purple toolbar
+        val item = menu.findItem(R.id.action_save)
+        val spannable = android.text.SpannableString(item.title)
+        spannable.setSpan(
+            android.text.style.ForegroundColorSpan(Color.WHITE),
+            0, spannable.length, 0
+        )
+        item.title = spannable
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_save -> { save(); true }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -173,15 +201,12 @@ class WhiteboardEditorActivity : AppCompatActivity() {
             .setItems(names) { _, which ->
                 val color = colors[which]
                 binding.whiteboardView.penColor = color
-                // Switching to a color turns eraser off
-                if (eraserActive) {
-                    eraserActive = false
-                    binding.whiteboardView.isEraser = false
-                    binding.btnEraser.alpha = 0.4f
-                }
                 updateColorSwatch(color)
+                // Picking a colour switches back to pen
+                eraserActive = false
+                binding.whiteboardView.isEraser = false
+                setToolSelected(pen = true)
             }
             .show()
     }
 }
-

@@ -4,6 +4,6 @@
     <item
         android:id="@+id/action_save"
         android:title="Save"
-        app:showAsAction="ifRoom|withText" />
+        android:orderInCategory="1"
+        app:showAsAction="always|withText" />
 </menu>
-
