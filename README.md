@@ -1,6 +1,7 @@
 # QuickNote
 
-An Android note-taking app I built for myself. Everything is stored locally on your phone.
+An Android note-taking app where you can create notes, organize them into folders, and add photos to your notes. 
+The app is designed to be simple and intuitive, making it easy to jot down ideas and keep everything organized.
 
 ---
 
