@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteImage
+import com.anton.quicknotes2.data.NoteList
+import com.anton.quicknotes2.data.NoteListItem
 import com.anton.quicknotes2.data.NoteRepository
 import com.anton.quicknotes2.data.Whiteboard
 import kotlinx.coroutines.launch
@@ -68,5 +70,20 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun updateWhiteboardIcon(id: Int, uri: String?) = viewModelScope.launch { repository.updateWhiteboardIcon(id, uri) }
     fun reorderHomeItems(items: List<HomeItem>) =
         viewModelScope.launch { repository.reorderHomeItemsWithWhiteboards(items) }
+
+    // ── NoteLists ──────────────────────────────────────────
+    val allLists = repository.allLists
+    fun getListsInFolder(folderId: Int) = repository.getListsInFolder(folderId)
+    suspend fun getListById(id: Int) = repository.getListById(id)
+    suspend fun insertList(list: NoteList) = repository.insertList(list)
+    fun updateList(list: NoteList) = viewModelScope.launch { repository.updateList(list) }
+    fun deleteList(list: NoteList) = viewModelScope.launch { repository.deleteList(list) }
+    fun updateListIcon(id: Int, uri: String?) = viewModelScope.launch { repository.updateListIcon(id, uri) }
+
+    fun getItemsForList(listId: Int) = repository.getItemsForList(listId)
+    suspend fun getItemsForListDirect(listId: Int) = repository.getItemsForListDirect(listId)
+    suspend fun insertListItem(item: NoteListItem) = repository.insertListItem(item)
+    suspend fun updateListItem(item: NoteListItem) = repository.updateListItem(item)
+    suspend fun deleteListItem(item: NoteListItem) = repository.deleteListItem(item)
 }
 

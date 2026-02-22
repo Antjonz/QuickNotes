@@ -7,13 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Note::class, Folder::class, NoteImage::class, Whiteboard::class], version = 7, exportSchema = false)
+@Database(entities = [Note::class, Folder::class, NoteImage::class, Whiteboard::class, NoteList::class, NoteListItem::class], version = 8, exportSchema = false)
 abstract class NoteDatabase : RoomDatabase() {
 
     abstract fun noteDao(): NoteDao
     abstract fun folderDao(): FolderDao
     abstract fun noteImageDao(): NoteImageDao
     abstract fun whiteboardDao(): WhiteboardDao
+    abstract fun noteListDao(): NoteListDao
 
     companion object {
         @Volatile
@@ -84,6 +85,32 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `note_lists` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`title` TEXT NOT NULL DEFAULT '', " +
+                    "`timestamp` INTEGER NOT NULL, " +
+                    "`folderId` INTEGER DEFAULT NULL, " +
+                    "`sortOrder` INTEGER NOT NULL DEFAULT 0, " +
+                    "`iconUri` TEXT DEFAULT NULL, " +
+                    "FOREIGN KEY(`folderId`) REFERENCES `folders`(`id`) ON DELETE SET NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_note_lists_folderId` ON `note_lists` (`folderId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `note_list_items` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`listId` INTEGER NOT NULL, " +
+                    "`text` TEXT NOT NULL DEFAULT '', " +
+                    "`position` INTEGER NOT NULL DEFAULT 0, " +
+                    "`checked` INTEGER NOT NULL DEFAULT 0, " +
+                    "FOREIGN KEY(`listId`) REFERENCES `note_lists`(`id`) ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_note_list_items_listId` ON `note_list_items` (`listId`)")
+            }
+        }
+
         fun getDatabase(context: Context): NoteDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -91,7 +118,7 @@ abstract class NoteDatabase : RoomDatabase() {
                     NoteDatabase::class.java,
                     "note_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                 INSTANCE = instance
                 instance

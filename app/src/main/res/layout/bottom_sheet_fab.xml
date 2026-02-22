@@ -31,6 +31,18 @@
         android:background="?attr/selectableItemBackground" />
 
     <TextView
+        android:id="@+id/btnNewList"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:drawablePadding="16dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="24dp"
+        android:text="New list"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:drawableStart="@android:drawable/ic_menu_sort_by_size"
+        android:background="?attr/selectableItemBackground" />
+
+    <TextView
         android:id="@+id/btnNewFolder"
         android:layout_width="match_parent"
         android:layout_height="56dp"

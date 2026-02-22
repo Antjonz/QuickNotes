@@ -36,7 +36,7 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
     }
 
     private var existingNote: Note? = null
@@ -259,7 +259,7 @@ class NoteEditorActivity : AppCompatActivity() {
         val body = binding.editBody.text.toString().trim()
         val now = System.currentTimeMillis()
         val db = NoteDatabase.getDatabase(applicationContext)
-        val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao())
+        val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao())
         val newId = repo.insertNoteWithOrder(
             Note(title = title, body = body, timestamp = now, folderId = targetFolderId)
         ).toInt()

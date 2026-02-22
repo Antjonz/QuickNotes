@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.NoteDatabase
+import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.NoteRepository
 import com.anton.quicknotes2.databinding.ActivityFolderBinding
 import com.anton.quicknotes2.databinding.DialogNewFolderBinding
@@ -38,6 +39,7 @@ class FolderActivity : AppCompatActivity() {
     private var pendingIconNoteId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
     private var pendingIconSubFolderId: Int? = null
+    private var pendingIconListId: Int? = null
 
     // Drag-into-subfolder state
     private var highlightedCard: MaterialCardView? = null
@@ -45,7 +47,7 @@ class FolderActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
     }
 
     private fun setCardHighlight(card: MaterialCardView?) {
@@ -62,6 +64,7 @@ class FolderActivity : AppCompatActivity() {
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
         pendingIconSubFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconSubFolderId = null }
+        pendingIconListId?.let { viewModel.updateListIcon(it, uri.toString()); pendingIconListId = null }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,7 +114,20 @@ class FolderActivity : AppCompatActivity() {
                 })
             },
             onSubFolderDelete = { folder -> showDeleteFolderDialog(folder) },
-            onSubFolderIconClick = { folder -> pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") }
+            onSubFolderIconClick = { folder -> pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") },
+            onListClick = { list ->
+                startActivity(Intent(this, ListEditorActivity::class.java).apply {
+                    putExtra(ListEditorActivity.EXTRA_LIST_ID, list.id)
+                })
+            },
+            onListDelete = { list ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete list")
+                    .setMessage("Are you sure you want to delete \"${list.title.ifBlank { "Untitled list" }}\"?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteList(list) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onListIconClick = { list -> pendingIconListId = list.id; pickIcon.launch("image/*") }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -159,7 +175,8 @@ class FolderActivity : AppCompatActivity() {
                 // Draggable item hovering over a sub-folder → highlight to drop into it
                 val isDraggable = draggedItem is FolderItem.NoteItem ||
                                   draggedItem is FolderItem.WhiteboardItem ||
-                                  draggedItem is FolderItem.SubFolderItem
+                                  draggedItem is FolderItem.SubFolderItem ||
+                                  draggedItem is FolderItem.ListItem
                 if (isDraggable && targetItem is FolderItem.SubFolderItem &&
                     (draggedItem !is FolderItem.SubFolderItem || draggedItem.folder.id != targetItem.folder.id)) {
                     val card = target.itemView as? MaterialCardView
@@ -213,10 +230,10 @@ class FolderActivity : AppCompatActivity() {
                             is FolderItem.NoteItem -> viewModel.update(item.note.copy(folderId = targetFolder.id))
                             is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(item.wb.copy(folderId = targetFolder.id))
                             is FolderItem.SubFolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = targetFolder.id))
+                            is FolderItem.ListItem -> viewModel.updateList(item.noteList.copy(folderId = targetFolder.id))
                         }
                     }
                     moveOut != null -> {
-                        // Move up one level (to grandparent, or root if we're at level 1)
                         lifecycleScope.launch {
                             val parent = viewModel.getFolderById(folderId)
                             val grandParentId = parent?.parentFolderId
@@ -224,6 +241,7 @@ class FolderActivity : AppCompatActivity() {
                                 is FolderItem.NoteItem -> viewModel.update(moveOut.note.copy(folderId = grandParentId))
                                 is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(moveOut.wb.copy(folderId = grandParentId))
                                 is FolderItem.SubFolderItem -> viewModel.updateFolder(moveOut.folder.copy(parentFolderId = grandParentId))
+                                is FolderItem.ListItem -> viewModel.updateList(moveOut.noteList.copy(folderId = grandParentId))
                             }
                         }
                     }
@@ -239,11 +257,12 @@ class FolderActivity : AppCompatActivity() {
         var latestNotes = emptyList<com.anton.quicknotes2.data.Note>()
         var latestWhiteboards = emptyList<com.anton.quicknotes2.data.Whiteboard>()
         var latestSubFolders = emptyList<Folder>()
+        var latestLists = emptyList<NoteList>()
 
         fun refresh() {
             if (!isDragging) {
-                adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders)
-                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() && latestSubFolders.isEmpty()
+                adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
+                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() && latestSubFolders.isEmpty() && latestLists.isEmpty()
                 binding.emptyText.visibility = if (empty) android.view.View.VISIBLE else android.view.View.GONE
             }
         }
@@ -251,6 +270,7 @@ class FolderActivity : AppCompatActivity() {
         viewModel.getNotesInFolder(folderId).observe(this) { latestNotes = it; refresh() }
         viewModel.getWhiteboardsInFolder(folderId).observe(this) { latestWhiteboards = it; refresh() }
         viewModel.getSubFolders(folderId).observe(this) { latestSubFolders = it; refresh() }
+        viewModel.getListsInFolder(folderId).observe(this) { latestLists = it; refresh() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
@@ -292,6 +312,12 @@ class FolderActivity : AppCompatActivity() {
             sheet.dismiss()
             startActivity(Intent(this, WhiteboardEditorActivity::class.java).apply {
                 putExtra(WhiteboardEditorActivity.EXTRA_FOLDER_ID, folderId)
+            })
+        }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewList).setOnClickListener {
+            sheet.dismiss()
+            startActivity(Intent(this, ListEditorActivity::class.java).apply {
+                putExtra(ListEditorActivity.EXTRA_FOLDER_ID, folderId)
             })
         }
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {

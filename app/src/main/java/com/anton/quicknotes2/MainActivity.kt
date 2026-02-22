@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteDatabase
+import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.NoteRepository
 import com.anton.quicknotes2.databinding.ActivityMainBinding
 import com.anton.quicknotes2.databinding.DialogNewFolderBinding
@@ -33,13 +34,14 @@ class MainActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
     }
 
     private var isDragging = false
     private var pendingIconNoteId: Int? = null
     private var pendingIconFolderId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
+    private var pendingIconListId: Int? = null
 
     // Drag-into-folder state — holds either a NoteItem or WhiteboardItem + the target folder
     private var highlightedCard: MaterialCardView? = null
@@ -60,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconFolderId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
+        pendingIconListId?.let { viewModel.updateListIcon(it, uri.toString()); pendingIconListId = null }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,6 +133,21 @@ class MainActivity : AppCompatActivity() {
             },
             onWhiteboardIconClick = { wb ->
                 pendingIconWhiteboardId = wb.id; pendingIconNoteId = null; pendingIconFolderId = null; pickIcon.launch("image/*")
+            },
+            onListClick = { list ->
+                startActivity(Intent(this, ListEditorActivity::class.java).apply {
+                    putExtra(ListEditorActivity.EXTRA_LIST_ID, list.id)
+                })
+            },
+            onListDelete = { list ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete list")
+                    .setMessage("Are you sure you want to delete \"${list.title.ifBlank { "Untitled list" }}\"?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteList(list) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onListIconClick = { list ->
+                pendingIconListId = list.id; pendingIconNoteId = null; pendingIconFolderId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
             }
         )
 
@@ -147,7 +165,8 @@ class MainActivity : AppCompatActivity() {
 
                 val isDraggable = draggedItem is HomeItem.NoteItem ||
                                   draggedItem is HomeItem.WhiteboardItem ||
-                                  draggedItem is HomeItem.FolderItem
+                                  draggedItem is HomeItem.FolderItem ||
+                                  draggedItem is HomeItem.ListItem
 
                 when {
                     // Hovering over cancel row → clear any folder highlight
@@ -188,7 +207,8 @@ class MainActivity : AppCompatActivity() {
                 if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
                     val pos = viewHolder.bindingAdapterPosition
                     val item = if (pos >= 0) adapter.getItemAt(pos) else null
-                    if (item is HomeItem.NoteItem || item is HomeItem.WhiteboardItem) {
+                    if (item is HomeItem.NoteItem || item is HomeItem.WhiteboardItem ||
+                        item is HomeItem.ListItem || item is HomeItem.FolderItem) {
                         adapter.isDraggingNote = true
                     }
                 }
@@ -208,6 +228,7 @@ class MainActivity : AppCompatActivity() {
                         is HomeItem.NoteItem -> viewModel.update(item.note.copy(folderId = folder.id))
                         is HomeItem.WhiteboardItem -> viewModel.updateWhiteboard(item.whiteboard.copy(folderId = folder.id))
                         is HomeItem.FolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = folder.id))
+                        is HomeItem.ListItem -> viewModel.updateList(item.noteList.copy(folderId = folder.id))
                     }
                 } else {
                     viewModel.reorderHomeItems(adapter.getItems())
@@ -220,6 +241,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.allFolders.observe(this) { _ -> if (!isDragging) refreshHomeList() }
         viewModel.allNotes.observe(this) { _ -> if (!isDragging) refreshHomeList() }
         viewModel.allWhiteboards.observe(this) { _ -> if (!isDragging) refreshHomeList() }
+        viewModel.allLists.observe(this) { _ -> if (!isDragging) refreshHomeList() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
@@ -228,25 +250,29 @@ class MainActivity : AppCompatActivity() {
         val folders = viewModel.allFolders.value ?: emptyList()
         val notes = viewModel.allNotes.value ?: emptyList()
         val whiteboards = viewModel.allWhiteboards.value ?: emptyList()
-        val items = buildHomeList(folders, notes, whiteboards)
+        val lists = viewModel.allLists.value ?: emptyList()
+        val items = buildHomeList(folders, notes, whiteboards, lists)
         adapter.submitList(items)
         binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun buildHomeList(
-        folders: List<Folder>,
-        notes: List<Note>,
-        whiteboards: List<com.anton.quicknotes2.data.Whiteboard>
+        folders: List<com.anton.quicknotes2.data.Folder>,
+        notes: List<com.anton.quicknotes2.data.Note>,
+        whiteboards: List<com.anton.quicknotes2.data.Whiteboard>,
+        lists: List<com.anton.quicknotes2.data.NoteList> = emptyList()
     ): List<HomeItem> {
         val combined = mutableListOf<HomeItem>()
         folders.forEach { combined.add(HomeItem.FolderItem(it)) }
         notes.forEach { combined.add(HomeItem.NoteItem(it)) }
         whiteboards.forEach { combined.add(HomeItem.WhiteboardItem(it)) }
+        lists.forEach { combined.add(HomeItem.ListItem(it)) }
         combined.sortBy {
             when (it) {
                 is HomeItem.NoteItem -> it.note.sortOrder
                 is HomeItem.FolderItem -> it.folder.sortOrder
                 is HomeItem.WhiteboardItem -> it.whiteboard.sortOrder
+                is HomeItem.ListItem -> it.noteList.sortOrder
             }
         }
         return combined
@@ -262,6 +288,10 @@ class MainActivity : AppCompatActivity() {
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewWhiteboard).setOnClickListener {
             sheet.dismiss()
             startActivity(Intent(this, WhiteboardEditorActivity::class.java))
+        }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewList).setOnClickListener {
+            sheet.dismiss()
+            startActivity(Intent(this, ListEditorActivity::class.java))
         }
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {
             sheet.dismiss(); showNewFolderDialog()

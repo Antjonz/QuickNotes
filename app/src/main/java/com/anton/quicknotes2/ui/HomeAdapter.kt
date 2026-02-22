@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
+import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.Whiteboard
 import com.anton.quicknotes2.databinding.ItemFolderBinding
 import com.anton.quicknotes2.databinding.ItemNoteBinding
@@ -26,7 +27,10 @@ class HomeAdapter(
     private val onFolderIconClick: (Folder) -> Unit,
     private val onWhiteboardClick: (Whiteboard) -> Unit = {},
     private val onWhiteboardDelete: (Whiteboard) -> Unit = {},
-    private val onWhiteboardIconClick: (Whiteboard) -> Unit = {}
+    private val onWhiteboardIconClick: (Whiteboard) -> Unit = {},
+    private val onListClick: (NoteList) -> Unit = {},
+    private val onListDelete: (NoteList) -> Unit = {},
+    private val onListIconClick: (NoteList) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<HomeItem>()
@@ -46,6 +50,7 @@ class HomeAdapter(
         const val TYPE_FOLDER = 1
         const val TYPE_CANCEL = 2
         const val TYPE_WHITEBOARD = 3
+        const val TYPE_LIST = 4
     }
 
     fun submitList(newItems: List<HomeItem>) {
@@ -58,6 +63,7 @@ class HomeAdapter(
                     old is HomeItem.NoteItem && new is HomeItem.NoteItem -> old.note.id == new.note.id
                     old is HomeItem.FolderItem && new is HomeItem.FolderItem -> old.folder.id == new.folder.id
                     old is HomeItem.WhiteboardItem && new is HomeItem.WhiteboardItem -> old.whiteboard.id == new.whiteboard.id
+                    old is HomeItem.ListItem && new is HomeItem.ListItem -> old.noteList.id == new.noteList.id
                     else -> false
                 }
             }
@@ -89,6 +95,7 @@ class HomeAdapter(
             is HomeItem.NoteItem -> TYPE_NOTE
             is HomeItem.FolderItem -> TYPE_FOLDER
             is HomeItem.WhiteboardItem -> TYPE_WHITEBOARD
+            is HomeItem.ListItem -> TYPE_LIST
         }
     }
 
@@ -98,6 +105,7 @@ class HomeAdapter(
             TYPE_NOTE -> NoteViewHolder(ItemNoteBinding.inflate(inflater, parent, false))
             TYPE_FOLDER -> FolderViewHolder(ItemFolderBinding.inflate(inflater, parent, false))
             TYPE_WHITEBOARD -> WhiteboardViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
+            TYPE_LIST -> ListViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
             else -> object : RecyclerView.ViewHolder(
                 inflater.inflate(com.anton.quicknotes2.R.layout.item_drag_cancel, parent, false)
             ) {}
@@ -110,6 +118,7 @@ class HomeAdapter(
             is HomeItem.NoteItem -> (holder as NoteViewHolder).bind(item.note)
             is HomeItem.FolderItem -> (holder as FolderViewHolder).bind(item.folder)
             is HomeItem.WhiteboardItem -> (holder as WhiteboardViewHolder).bind(item.whiteboard)
+            is HomeItem.ListItem -> (holder as ListViewHolder).bind(item.noteList)
         }
     }
 
@@ -156,6 +165,23 @@ class HomeAdapter(
             binding.btnDelete.setOnClickListener { onWhiteboardDelete(wb) }
             binding.itemIcon.setOnClickListener { onWhiteboardIconClick(wb) }
             if (wb.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(wb.iconUri))
+            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            binding.dragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
+                false
+            }
+        }
+    }
+
+    inner class ListViewHolder(private val binding: ItemWhiteboardBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(list: NoteList) {
+            binding.textTitle.text = list.title.ifBlank { "Untitled list" }
+            binding.textTimestamp.text = formatDate(list.timestamp)
+            binding.root.setOnClickListener { onListClick(list) }
+            binding.btnDelete.setOnClickListener { onListDelete(list) }
+            binding.itemIcon.setOnClickListener { onListIconClick(list) }
+            if (list.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(list.iconUri))
             else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
             binding.dragHandle.setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
