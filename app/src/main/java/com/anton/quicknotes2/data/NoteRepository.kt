@@ -36,30 +36,45 @@ class NoteRepository(
     val allFolders: LiveData<List<Folder>> = folderDao.getAllFolders()
 
     suspend fun insertFolder(folder: Folder): Long {
-        val maxOrder = folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1
+        val maxOrder = maxOf(
+            folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
+            noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
+            whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
+        )
         return folderDao.insertAndGetId(folder.copy(sortOrder = maxOrder + 1))
     }
     suspend fun updateFolder(folder: Folder) = folderDao.update(folder)
     suspend fun deleteFolder(folder: Folder) = folderDao.delete(folder)
     suspend fun getFolderById(id: Int): Folder? = folderDao.getFolderById(id)
 
-    /** Delete folder and all notes inside it. */
+    /** Delete folder and all notes + whiteboards inside it. */
     suspend fun deleteFolderAndNotes(folder: Folder) {
         noteDao.getNotesInFolderDirect(folder.id).forEach { noteDao.delete(it) }
+        whiteboardDao?.getWhiteboardsInFolderDirect(folder.id)?.forEach { whiteboardDao.delete(it) }
         folderDao.delete(folder)
     }
 
-    /** Delete folder but move its notes to the home screen. */
+    /** Delete folder but move its notes + whiteboards to the home screen. */
     suspend fun deleteFolderMoveNotesOut(folder: Folder) {
         val maxOrder = maxOf(
             noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
-            folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1
+            folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
+            whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
         )
         noteDao.getNotesInFolderDirect(folder.id).forEachIndexed { i, note ->
             noteDao.update(note.copy(folderId = null, sortOrder = maxOrder + 1 + i))
         }
+        val noteCount = noteDao.getNotesInFolderDirect(folder.id).size
+        whiteboardDao?.getWhiteboardsInFolderDirect(folder.id)?.forEachIndexed { i, wb ->
+            whiteboardDao.update(wb.copy(folderId = null, sortOrder = maxOrder + 1 + noteCount + i))
+        }
         folderDao.delete(folder)
     }
+
+    /** Count of notes + whiteboards inside a folder. */
+    suspend fun getFolderItemCount(folderId: Int): Int =
+        noteDao.getNotesInFolderDirect(folderId).size +
+        (whiteboardDao?.getWhiteboardsInFolderDirect(folderId)?.size ?: 0)
 
     suspend fun getNotesInFolderCount(folderId: Int): Int =
         noteDao.getNotesInFolderDirect(folderId).size
@@ -70,9 +85,11 @@ class NoteRepository(
 
     suspend fun insertNoteWithOrder(note: Note): Long {
         val maxOrder = if (note.folderId == null) {
-            val maxNote = noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1
-            val maxFolder = folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1
-            maxOf(maxNote, maxFolder)
+            maxOf(
+                noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
+                folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
+                whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
+            )
         } else {
             noteDao.getNotesInFolderDirect(note.folderId).maxOfOrNull { it.sortOrder } ?: -1
         }

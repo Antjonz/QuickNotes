@@ -94,6 +94,9 @@ class FolderAdapter(
     fun getNoteAt(position: Int): Note? =
         (items.getOrNull(position - 1) as? FolderItem.NoteItem)?.note
 
+    /** Returns the note or whiteboard at adapter position (1-based, row 0 = drag-out header). */
+    fun getFolderItemAt(position: Int): FolderItem? = items.getOrNull(position - 1)
+
     override fun getItemCount() = items.size + 1 + if (isDragging) 1 else 0
 
     override fun getItemViewType(position: Int): Int {

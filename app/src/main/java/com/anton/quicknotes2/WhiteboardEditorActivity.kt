@@ -1,10 +1,14 @@
 package com.anton.quicknotes2
 
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
@@ -131,14 +135,6 @@ class WhiteboardEditorActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_whiteboard_editor, menu)
-        // Tint the Save text white so it shows on the purple toolbar
-        val item = menu.findItem(R.id.action_save)
-        val spannable = android.text.SpannableString(item.title)
-        spannable.setSpan(
-            android.text.style.ForegroundColorSpan(Color.WHITE),
-            0, spannable.length, 0
-        )
-        item.title = spannable
         return true
     }
 
@@ -147,6 +143,22 @@ class WhiteboardEditorActivity : AppCompatActivity() {
             R.id.action_save -> { save(); true }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            val v = currentFocus
+            if (v is EditText) {
+                val outRect = Rect()
+                v.getGlobalVisibleRect(outRect)
+                if (!outRect.contains(ev.rawX.toInt(), ev.rawY.toInt())) {
+                    v.clearFocus()
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.hideSoftInputFromWindow(v.windowToken, 0)
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -178,6 +190,7 @@ class WhiteboardEditorActivity : AppCompatActivity() {
                     timestamp = System.currentTimeMillis()
                 ))
             }
+            finish()
         }
     }
 

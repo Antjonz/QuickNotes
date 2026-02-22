@@ -88,7 +88,7 @@ class FolderActivity : AppCompatActivity() {
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
 
-        var pendingMoveOut: com.anton.quicknotes2.data.Note? = null
+        var pendingMoveOut: com.anton.quicknotes2.ui.FolderItem? = null
 
         val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
@@ -114,7 +114,7 @@ class FolderActivity : AppCompatActivity() {
                     if (dragOutView == null) {
                         target.itemView.setBackgroundColor(0x1A6650A4.toInt())
                         dragOutView = target.itemView
-                        pendingMoveOut = adapter.getNoteAt(from)
+                        pendingMoveOut = adapter.getFolderItemAt(from)
                     }
                     return false
                 }
@@ -146,7 +146,12 @@ class FolderActivity : AppCompatActivity() {
                 pendingMoveOut = null
                 isDragging = false
                 if (pending != null) {
-                    viewModel.update(pending.copy(folderId = null))
+                    when (pending) {
+                        is com.anton.quicknotes2.ui.FolderItem.NoteItem ->
+                            viewModel.update(pending.note.copy(folderId = null))
+                        is com.anton.quicknotes2.ui.FolderItem.WhiteboardItem ->
+                            viewModel.updateWhiteboard(pending.wb.copy(folderId = null))
+                    }
                 } else {
                     viewModel.reorderNotesInFolder(adapter.getItems())
                 }

@@ -41,9 +41,9 @@ class MainActivity : AppCompatActivity() {
     private var pendingIconFolderId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
 
-    // Drag-into-folder state
+    // Drag-into-folder state — holds either a NoteItem or WhiteboardItem + the target folder
     private var highlightedCard: MaterialCardView? = null
-    private var pendingFolderTarget: Pair<Note, Folder>? = null
+    private var pendingFolderTarget: Pair<HomeItem, Folder>? = null
     private var draggingNote: Note? = null
 
     private fun setCardHighlight(card: MaterialCardView?) {
@@ -93,14 +93,14 @@ class MainActivity : AppCompatActivity() {
                     .setMessage("Are you sure you want to delete \"${folder.name}\"?")
                     .setPositiveButton("Delete") { _, _ ->
                         lifecycleScope.launch {
-                            val count = viewModel.getNotesInFolderCount(folder.id)
+                            val count = viewModel.getFolderItemCount(folder.id)
                             if (count == 0) {
                                 viewModel.deleteFolder(folder)
                             } else {
                                 MaterialAlertDialogBuilder(this@MainActivity)
-                                    .setTitle("What about the notes inside?")
-                                    .setMessage("\"${folder.name}\" contains $count note${if (count == 1) "" else "s"}. Do you want to delete them too, or move them to the home screen?")
-                                    .setPositiveButton("Delete notes") { _, _ -> viewModel.deleteFolderAndNotes(folder) }
+                                    .setTitle("What about the items inside?")
+                                    .setMessage("\"${folder.name}\" contains $count item${if (count == 1) "" else "s"}. Do you want to delete them too, or move them to the home screen?")
+                                    .setPositiveButton("Delete all") { _, _ -> viewModel.deleteFolderAndNotes(folder) }
                                     .setNegativeButton("Move to home") { _, _ -> viewModel.deleteFolderMoveNotesOut(folder) }
                                     .setNeutralButton("Cancel", null)
                                     .show()
@@ -145,10 +145,10 @@ class MainActivity : AppCompatActivity() {
                 val draggedItem = adapter.getItemAt(from)
                 val targetItem = adapter.getItemAt(to) // null when to == cancel row
 
-                if (draggedItem is HomeItem.NoteItem) draggingNote = draggedItem.note
+                val isDraggable = draggedItem is HomeItem.NoteItem || draggedItem is HomeItem.WhiteboardItem
 
                 when {
-                    // Hovering over cancel row → clear any folder highlight, return false to keep firing
+                    // Hovering over cancel row → clear any folder highlight
                     targetItem == null -> {
                         if (highlightedCard != null) {
                             setCardHighlight(null)
@@ -156,12 +156,12 @@ class MainActivity : AppCompatActivity() {
                         }
                         return false
                     }
-                    // Note hovering over a folder → highlight, return false to keep firing
-                    draggedItem is HomeItem.NoteItem && targetItem is HomeItem.FolderItem -> {
+                    // Note or Whiteboard hovering over a folder → highlight
+                    isDraggable && targetItem is HomeItem.FolderItem -> {
                         val card = target.itemView as? MaterialCardView
                         if (card != highlightedCard) {
                             setCardHighlight(card)
-                            pendingFolderTarget = Pair(draggedItem.note, targetItem.folder)
+                            pendingFolderTarget = Pair(draggedItem!!, targetItem.folder)
                         }
                         return false
                     }
@@ -182,13 +182,11 @@ class MainActivity : AppCompatActivity() {
 
             override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
                 super.onSelectedChanged(viewHolder, actionState)
-                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
-                    // Show cancel row when drag starts
-                    if (viewHolder != null) {
-                        val pos = viewHolder.bindingAdapterPosition
-                        if (pos >= 0 && adapter.getItemAt(pos) is HomeItem.NoteItem) {
-                            adapter.isDraggingNote = true
-                        }
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
+                    val pos = viewHolder.bindingAdapterPosition
+                    val item = if (pos >= 0) adapter.getItemAt(pos) else null
+                    if (item is HomeItem.NoteItem || item is HomeItem.WhiteboardItem) {
+                        adapter.isDraggingNote = true
                     }
                 }
             }
@@ -202,7 +200,12 @@ class MainActivity : AppCompatActivity() {
                 draggingNote = null
                 isDragging = false
                 if (pending != null) {
-                    viewModel.update(pending.first.copy(folderId = pending.second.id))
+                    val (item, folder) = pending
+                    when (item) {
+                        is HomeItem.NoteItem -> viewModel.update(item.note.copy(folderId = folder.id))
+                        is HomeItem.WhiteboardItem -> viewModel.updateWhiteboard(item.whiteboard.copy(folderId = folder.id))
+                        else -> {}
+                    }
                 } else {
                     viewModel.reorderHomeItems(adapter.getItems())
                 }

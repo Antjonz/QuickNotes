@@ -38,6 +38,7 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun deleteFolderAndNotes(folder: Folder) = viewModelScope.launch { repository.deleteFolderAndNotes(folder) }
     fun deleteFolderMoveNotesOut(folder: Folder) = viewModelScope.launch { repository.deleteFolderMoveNotesOut(folder) }
     suspend fun getNotesInFolderCount(folderId: Int): Int = repository.getNotesInFolderCount(folderId)
+    suspend fun getFolderItemCount(folderId: Int): Int = repository.getFolderItemCount(folderId)
     suspend fun getFolderById(id: Int): Folder? = repository.getFolderById(id)
     fun updateFolderIcon(folderId: Int, uri: String?) =
         viewModelScope.launch { repository.updateFolderIcon(folderId, uri) }
