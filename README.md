@@ -18,9 +18,23 @@ The app is designed to be simple and intuitive, making it easy to jot down ideas
 - Tap a folder to open it and see the notes inside
 - Tap the + button to add a new note directly into that folder
 
-### Adding notes and folders
+### Adding notes, whiteboards and folders
 - On the home screen, tap the + button at the bottom right
-- A menu pops up asking if you want to make a new note or a new folder
+- A menu pops up asking if you want to make a new note, a new whiteboard, or a new folder
+- Inside a folder the same menu appears, but without the "New folder" option
+
+### Whiteboards
+- A whiteboard looks like a note on the home screen — it shows the title and the date
+- Tap it to open the drawing canvas
+- Draw with your finger using the tools at the bottom:
+  - **Colour picker** — tap the coloured circle to choose from a list of colours
+  - **Pen size** — drag the slider to make lines thinner or thicker
+  - **Eraser** — tap the eraser icon to switch to eraser mode (it gets brighter when active); tap again to go back to drawing
+  - **Clear board** — tap the bin icon to erase everything (asks for confirmation first)
+- **Pan** — drag with two fingers to move around the canvas
+- **Zoom** — pinch with two fingers to zoom in and out
+- Tap **Save** in the top bar to save your drawing
+- Going back without saving shows a warning
 
 ### Deleting
 - Every note and folder has a red delete button (trash icon)

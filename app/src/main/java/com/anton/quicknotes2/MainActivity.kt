@@ -33,12 +33,13 @@ class MainActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao()))
     }
 
     private var isDragging = false
     private var pendingIconNoteId: Int? = null
     private var pendingIconFolderId: Int? = null
+    private var pendingIconWhiteboardId: Int? = null
 
     // Drag-into-folder state
     private var highlightedCard: MaterialCardView? = null
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconFolderId = null }
+        pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,12 +100,8 @@ class MainActivity : AppCompatActivity() {
                                 MaterialAlertDialogBuilder(this@MainActivity)
                                     .setTitle("What about the notes inside?")
                                     .setMessage("\"${folder.name}\" contains $count note${if (count == 1) "" else "s"}. Do you want to delete them too, or move them to the home screen?")
-                                    .setPositiveButton("Delete notes") { _, _ ->
-                                        viewModel.deleteFolderAndNotes(folder)
-                                    }
-                                    .setNegativeButton("Move to home") { _, _ ->
-                                        viewModel.deleteFolderMoveNotesOut(folder)
-                                    }
+                                    .setPositiveButton("Delete notes") { _, _ -> viewModel.deleteFolderAndNotes(folder) }
+                                    .setNegativeButton("Move to home") { _, _ -> viewModel.deleteFolderMoveNotesOut(folder) }
                                     .setNeutralButton("Cancel", null)
                                     .show()
                             }
@@ -113,10 +111,25 @@ class MainActivity : AppCompatActivity() {
             },
             onOrderChanged = { items -> viewModel.reorderHomeItems(items) },
             onNoteIconClick = { note ->
-                pendingIconNoteId = note.id; pendingIconFolderId = null; pickIcon.launch("image/*")
+                pendingIconNoteId = note.id; pendingIconFolderId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
             },
             onFolderIconClick = { folder ->
-                pendingIconFolderId = folder.id; pendingIconNoteId = null; pickIcon.launch("image/*")
+                pendingIconFolderId = folder.id; pendingIconNoteId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
+            },
+            onWhiteboardClick = { wb ->
+                startActivity(Intent(this, WhiteboardEditorActivity::class.java).apply {
+                    putExtra(WhiteboardEditorActivity.EXTRA_WHITEBOARD_ID, wb.id)
+                })
+            },
+            onWhiteboardDelete = { wb ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete whiteboard")
+                    .setMessage("Are you sure you want to delete \"${wb.title.ifBlank { "Untitled whiteboard" }}\"?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteWhiteboard(wb) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onWhiteboardIconClick = { wb ->
+                pendingIconWhiteboardId = wb.id; pendingIconNoteId = null; pendingIconFolderId = null; pickIcon.launch("image/*")
             }
         )
 
@@ -198,32 +211,36 @@ class MainActivity : AppCompatActivity() {
         touchHelper.attachToRecyclerView(binding.recyclerView)
         adapter.itemTouchHelper = touchHelper
 
-        viewModel.allFolders.observe(this) { folders ->
-            if (isDragging) return@observe
-            val notes = viewModel.allNotes.value ?: emptyList()
-            val items = buildHomeList(folders, notes)
-            adapter.submitList(items)
-            binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        viewModel.allNotes.observe(this) { notes ->
-            if (isDragging) return@observe
-            val folders = viewModel.allFolders.value ?: emptyList()
-            val items = buildHomeList(folders, notes)
-            adapter.submitList(items)
-            binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-        }
+        viewModel.allFolders.observe(this) { _ -> if (!isDragging) refreshHomeList() }
+        viewModel.allNotes.observe(this) { _ -> if (!isDragging) refreshHomeList() }
+        viewModel.allWhiteboards.observe(this) { _ -> if (!isDragging) refreshHomeList() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
 
-    private fun buildHomeList(folders: List<Folder>, notes: List<Note>): List<HomeItem> {
+    private fun refreshHomeList() {
+        val folders = viewModel.allFolders.value ?: emptyList()
+        val notes = viewModel.allNotes.value ?: emptyList()
+        val whiteboards = viewModel.allWhiteboards.value ?: emptyList()
+        val items = buildHomeList(folders, notes, whiteboards)
+        adapter.submitList(items)
+        binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private fun buildHomeList(
+        folders: List<Folder>,
+        notes: List<Note>,
+        whiteboards: List<com.anton.quicknotes2.data.Whiteboard>
+    ): List<HomeItem> {
         val combined = mutableListOf<HomeItem>()
         folders.forEach { combined.add(HomeItem.FolderItem(it)) }
         notes.forEach { combined.add(HomeItem.NoteItem(it)) }
+        whiteboards.forEach { combined.add(HomeItem.WhiteboardItem(it)) }
         combined.sortBy {
             when (it) {
                 is HomeItem.NoteItem -> it.note.sortOrder
                 is HomeItem.FolderItem -> it.folder.sortOrder
+                is HomeItem.WhiteboardItem -> it.whiteboard.sortOrder
             }
         }
         return combined
@@ -235,6 +252,10 @@ class MainActivity : AppCompatActivity() {
         sheet.setContentView(sheetView)
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewNote).setOnClickListener {
             sheet.dismiss(); startActivity(Intent(this, NoteEditorActivity::class.java))
+        }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewWhiteboard).setOnClickListener {
+            sheet.dismiss()
+            startActivity(Intent(this, WhiteboardEditorActivity::class.java))
         }
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {
             sheet.dismiss(); showNewFolderDialog()

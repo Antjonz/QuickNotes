@@ -34,6 +34,11 @@
             android:name=".ImageViewerActivity"
             android:exported="false"
             android:theme="@style/Theme.QuickNotes2" />
+        <activity
+            android:name=".WhiteboardEditorActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

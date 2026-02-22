@@ -8,42 +8,68 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.anton.quicknotes2.data.Note
+import com.anton.quicknotes2.data.Whiteboard
 import com.anton.quicknotes2.databinding.ItemNoteBinding
+import com.anton.quicknotes2.databinding.ItemWhiteboardBinding
 import java.text.SimpleDateFormat
 import java.util.*
+
+// Sealed type for items inside a folder (notes + whiteboards)
+sealed class FolderItem {
+    data class NoteItem(val note: Note) : FolderItem()
+    data class WhiteboardItem(val wb: Whiteboard) : FolderItem()
+}
 
 class FolderAdapter(
     private val onNoteClick: (Note) -> Unit,
     private val onNoteDelete: (Note) -> Unit,
     private val onOrderChanged: (List<Note>) -> Unit,
     private val onNoteIconClick: (Note) -> Unit = {},
-    val onMoveOutOfFolder: (Note) -> Unit = {}
+    val onMoveOutOfFolder: (Note) -> Unit = {},
+    private val onWhiteboardClick: (Whiteboard) -> Unit = {},
+    private val onWhiteboardDelete: (Whiteboard) -> Unit = {},
+    private val onWhiteboardIconClick: (Whiteboard) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
         const val TYPE_DRAG_OUT = 0
         const val TYPE_NOTE = 1
         const val TYPE_CANCEL = 2
+        const val TYPE_WHITEBOARD = 3
     }
 
-    private val items = mutableListOf<Note>()
+    // Mixed list of notes and whiteboards
+    private val items = mutableListOf<FolderItem>()
     var itemTouchHelper: ItemTouchHelper? = null
 
-    // Cancel row shown at bottom during drag
     var isDragging: Boolean = false
         set(value) {
             if (field == value) return
             field = value
-            val cancelPos = items.size + 1  // after drag-out header + all notes
+            val cancelPos = items.size + 1
             if (value) notifyItemInserted(cancelPos)
             else notifyItemRemoved(cancelPos)
         }
 
-    fun submitList(newItems: List<Note>) {
+    fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>) {
+        val newItems = mutableListOf<FolderItem>()
+        notes.forEach { newItems.add(FolderItem.NoteItem(it)) }
+        whiteboards.forEach { newItems.add(FolderItem.WhiteboardItem(it)) }
+        newItems.sortBy { when (it) {
+            is FolderItem.NoteItem -> it.note.sortOrder
+            is FolderItem.WhiteboardItem -> it.wb.sortOrder
+        }}
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = items.size
             override fun getNewListSize() = newItems.size
-            override fun areItemsTheSame(o: Int, n: Int) = items[o].id == newItems[n].id
+            override fun areItemsTheSame(o: Int, n: Int): Boolean {
+                val old = items[o]; val new = newItems[n]
+                return when {
+                    old is FolderItem.NoteItem && new is FolderItem.NoteItem -> old.note.id == new.note.id
+                    old is FolderItem.WhiteboardItem && new is FolderItem.WhiteboardItem -> old.wb.id == new.wb.id
+                    else -> false
+                }
+            }
             override fun areContentsTheSame(o: Int, n: Int) = items[o] == newItems[n]
         })
         items.clear()
@@ -51,27 +77,32 @@ class FolderAdapter(
         diff.dispatchUpdatesTo(this)
     }
 
-    fun getItems(): List<Note> = items.toList()
+    // Legacy single-type submit (notes only) — kept for compatibility
+    fun submitList(notes: List<Note>) = submitMixed(notes, emptyList())
 
-    // position in adapter = index+1 because row 0 is the drag-out header
+    fun getItems(): List<Note> = items.filterIsInstance<FolderItem.NoteItem>().map { it.note }
+
     fun moveItem(from: Int, to: Int) {
         val fromIdx = from - 1
         val toIdx = to - 1
-        if (fromIdx < 0 || toIdx < 0) return
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= items.size || toIdx >= items.size) return
         if (fromIdx < toIdx) for (i in fromIdx until toIdx) Collections.swap(items, i, i + 1)
         else for (i in fromIdx downTo toIdx + 1) Collections.swap(items, i, i - 1)
         notifyItemMoved(from, to)
     }
 
-    fun getNoteAt(position: Int): Note? = items.getOrNull(position - 1)
+    fun getNoteAt(position: Int): Note? =
+        (items.getOrNull(position - 1) as? FolderItem.NoteItem)?.note
 
-    // Total = 1 (drag-out) + notes + 1 (cancel, only during drag)
     override fun getItemCount() = items.size + 1 + if (isDragging) 1 else 0
 
     override fun getItemViewType(position: Int): Int {
         if (position == 0) return TYPE_DRAG_OUT
         if (isDragging && position == items.size + 1) return TYPE_CANCEL
-        return TYPE_NOTE
+        return when (items[position - 1]) {
+            is FolderItem.NoteItem -> TYPE_NOTE
+            is FolderItem.WhiteboardItem -> TYPE_WHITEBOARD
+        }
     }
 
     inner class DragOutViewHolder(root: android.view.View) : RecyclerView.ViewHolder(root)
@@ -81,12 +112,28 @@ class FolderAdapter(
         fun bind(note: Note) {
             binding.textTitle.text = note.title.ifBlank { "Untitled" }
             binding.textBody.text = note.body
-            binding.textTimestamp.text =
-                SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()).format(Date(note.timestamp))
+            binding.textTimestamp.text = SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()).format(Date(note.timestamp))
             binding.root.setOnClickListener { onNoteClick(note) }
             binding.btnDelete.setOnClickListener { onNoteDelete(note) }
             binding.itemIcon.setOnClickListener { onNoteIconClick(note) }
             if (note.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(note.iconUri))
+            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            binding.dragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
+                false
+            }
+        }
+    }
+
+    inner class WhiteboardViewHolder(private val binding: ItemWhiteboardBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(wb: Whiteboard) {
+            binding.textTitle.text = wb.title.ifBlank { "Untitled whiteboard" }
+            binding.textTimestamp.text = SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()).format(Date(wb.timestamp))
+            binding.root.setOnClickListener { onWhiteboardClick(wb) }
+            binding.btnDelete.setOnClickListener { onWhiteboardDelete(wb) }
+            binding.itemIcon.setOnClickListener { onWhiteboardIconClick(wb) }
+            if (wb.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(wb.iconUri))
             else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
             binding.dragHandle.setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
@@ -104,11 +151,16 @@ class FolderAdapter(
             TYPE_CANCEL -> object : RecyclerView.ViewHolder(
                 inflater.inflate(com.anton.quicknotes2.R.layout.item_drag_cancel, parent, false)
             ) {}
+            TYPE_WHITEBOARD -> WhiteboardViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
             else -> NoteViewHolder(ItemNoteBinding.inflate(inflater, parent, false))
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        if (holder is NoteViewHolder) holder.bind(items[position - 1])
+        if (position == 0 || (isDragging && position == items.size + 1)) return
+        when (val item = items[position - 1]) {
+            is FolderItem.NoteItem -> (holder as? NoteViewHolder)?.bind(item.note)
+            is FolderItem.WhiteboardItem -> (holder as? WhiteboardViewHolder)?.bind(item.wb)
+        }
     }
 }

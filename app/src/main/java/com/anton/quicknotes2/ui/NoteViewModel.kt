@@ -7,6 +7,7 @@ import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteImage
 import com.anton.quicknotes2.data.NoteRepository
+import com.anton.quicknotes2.data.Whiteboard
 import kotlinx.coroutines.launch
 
 class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
@@ -24,8 +25,6 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun getNotesInFolder(folderId: Int): LiveData<List<Note>> =
         repository.getNotesInFolder(folderId)
 
-    fun reorderHomeItems(items: List<HomeItem>) =
-        viewModelScope.launch { repository.reorderHomeItems(items) }
 
     fun reorderNotesInFolder(notes: List<Note>) =
         viewModelScope.launch { repository.reorderNotesInFolder(notes) }
@@ -51,5 +50,17 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun deleteImage(image: NoteImage) = viewModelScope.launch { repository.deleteImage(image) }
     fun reorderImages(images: List<NoteImage>) =
         viewModelScope.launch { repository.reorderImages(images) }
+
+    // ── Whiteboards ────────────────────────────────────────
+    val allWhiteboards = repository.allWhiteboards
+    fun getWhiteboardsInFolder(folderId: Int) = repository.getWhiteboardsInFolder(folderId)
+    suspend fun getWhiteboardById(id: Int) = repository.getWhiteboardById(id)
+    suspend fun insertWhiteboard(wb: Whiteboard) = repository.insertWhiteboard(wb)
+    suspend fun insertWhiteboardInFolder(wb: Whiteboard) = repository.insertWhiteboardInFolder(wb)
+    fun updateWhiteboard(wb: Whiteboard) = viewModelScope.launch { repository.updateWhiteboard(wb) }
+    fun deleteWhiteboard(wb: Whiteboard) = viewModelScope.launch { repository.deleteWhiteboard(wb) }
+    fun updateWhiteboardIcon(id: Int, uri: String?) = viewModelScope.launch { repository.updateWhiteboardIcon(id, uri) }
+    fun reorderHomeItems(items: List<HomeItem>) =
+        viewModelScope.launch { repository.reorderHomeItemsWithWhiteboards(items) }
 }
 

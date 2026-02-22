@@ -6,7 +6,8 @@ import com.anton.quicknotes2.ui.HomeItem
 class NoteRepository(
     private val noteDao: NoteDao,
     private val folderDao: FolderDao,
-    private val noteImageDao: NoteImageDao
+    private val noteImageDao: NoteImageDao,
+    private val whiteboardDao: WhiteboardDao? = null
 ) {
 
     // ── Notes ──────────────────────────────────────────────
@@ -24,14 +25,6 @@ class NoteRepository(
     fun getNotesInFolder(folderId: Int): LiveData<List<Note>> =
         folderDao.getNotesInFolder(folderId)
 
-    suspend fun reorderHomeItems(items: List<HomeItem>) {
-        items.forEachIndexed { index, item ->
-            when (item) {
-                is HomeItem.NoteItem -> noteDao.update(item.note.copy(sortOrder = index))
-                is HomeItem.FolderItem -> folderDao.update(item.folder.copy(sortOrder = index))
-            }
-        }
-    }
 
     suspend fun reorderNotesInFolder(notes: List<Note>) {
         notes.forEachIndexed { index, note ->
@@ -101,6 +94,60 @@ class NoteRepository(
     suspend fun reorderImages(images: List<NoteImage>) {
         images.forEachIndexed { index, img ->
             noteImageDao.update(img.copy(sortOrder = index))
+        }
+    }
+
+    // ── Whiteboards ────────────────────────────────────────
+    val allWhiteboards: LiveData<List<Whiteboard>>
+        get() = whiteboardDao!!.getAllWhiteboards()
+
+    fun getWhiteboardsInFolder(folderId: Int): LiveData<List<Whiteboard>> =
+        whiteboardDao!!.getWhiteboardsInFolder(folderId)
+
+    suspend fun getWhiteboardById(id: Int): Whiteboard? = whiteboardDao!!.getWhiteboardById(id)
+
+    suspend fun insertWhiteboard(wb: Whiteboard): Long {
+        val maxOrder = maxOf(
+            noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
+            folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
+            whiteboardDao!!.getAllWhiteboardsDirect().maxOfOrNull { it.sortOrder } ?: -1
+        )
+        return whiteboardDao.insertAndGetId(wb.copy(sortOrder = maxOrder + 1))
+    }
+
+    suspend fun insertWhiteboardInFolder(wb: Whiteboard): Long {
+        val fid = wb.folderId ?: return whiteboardDao!!.insertAndGetId(wb)
+        val maxOrder = maxOf(
+            noteDao.getNotesInFolderDirect(fid).maxOfOrNull { it.sortOrder } ?: -1,
+            whiteboardDao!!.getWhiteboardsInFolderDirect(fid).maxOfOrNull { it.sortOrder } ?: -1
+        )
+        return whiteboardDao.insertAndGetId(wb.copy(sortOrder = maxOrder + 1))
+    }
+
+    suspend fun updateWhiteboard(wb: Whiteboard) = whiteboardDao!!.update(wb)
+    suspend fun deleteWhiteboard(wb: Whiteboard) = whiteboardDao!!.delete(wb)
+
+    suspend fun updateWhiteboardIcon(id: Int, uri: String?) {
+        val wb = whiteboardDao!!.getWhiteboardById(id) ?: return
+        whiteboardDao.update(wb.copy(iconUri = uri))
+    }
+
+    suspend fun reorderHomeItemsWithWhiteboards(items: List<HomeItem>) {
+        items.forEachIndexed { index, item ->
+            when (item) {
+                is HomeItem.NoteItem -> noteDao.update(item.note.copy(sortOrder = index))
+                is HomeItem.FolderItem -> folderDao.update(item.folder.copy(sortOrder = index))
+                is HomeItem.WhiteboardItem -> whiteboardDao!!.update(item.whiteboard.copy(sortOrder = index))
+            }
+        }
+    }
+
+    suspend fun reorderFolderItemsWithWhiteboards(items: List<Any>) {
+        items.forEachIndexed { index, item ->
+            when (item) {
+                is Note -> noteDao.update(item.copy(sortOrder = index))
+                is Whiteboard -> whiteboardDao!!.update(item.copy(sortOrder = index))
+            }
         }
     }
 }
