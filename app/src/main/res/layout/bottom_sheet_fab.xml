@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingVertical="8dp">
+
+    <TextView
+        android:id="@+id/btnNewNote"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:drawablePadding="16dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="24dp"
+        android:text="@string/new_note"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:drawableStart="@android:drawable/ic_input_add"
+        android:background="?attr/selectableItemBackground" />
+
+    <TextView
+        android:id="@+id/btnNewFolder"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:drawablePadding="16dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="24dp"
+        android:text="@string/new_folder"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:drawableStart="@android:drawable/ic_menu_agenda"
+        android:background="?attr/selectableItemBackground" />
+
+</LinearLayout>
+

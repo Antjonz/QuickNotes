@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">QuickNote</string>
+    <string name="new_note">New note</string>
+    <string name="edit_note">Edit Note</string>
+    <string name="title_hint">Title</string>
+    <string name="body_hint">Start typing…</string>
+    <string name="save">Save</string>
+    <string name="no_notes">No notes yet.\nTap + to create one.</string>
+    <string name="new_folder">New Folder</string>
+    <string name="folder">Folder</string>
+    <string name="folder_name_hint">Folder name</string>
+    <string name="create">Create</string>
+</resources>

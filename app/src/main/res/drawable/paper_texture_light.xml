@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Solid white base -->
+    <item>
+        <color android:color="#FFFFFFFF" />
+    </item>
+    <!-- Full paper texture -->
+    <item>
+        <bitmap
+            android:src="@drawable/paper_texture"
+            android:gravity="fill"
+            android:tileMode="disabled" />
+    </item>
+    <!-- 30% white on top = texture appears at ~70% strength -->
+    <item>
+        <color android:color="#4DFFFFFF" />
+    </item>
+</layer-list>

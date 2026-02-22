@@ -1,0 +1,256 @@
+package com.anton.quicknotes2
+
+import android.content.Intent
+import android.graphics.Color
+import android.os.Bundle
+import android.view.LayoutInflater
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
+import kotlinx.coroutines.launch
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.anton.quicknotes2.data.Folder
+import com.anton.quicknotes2.data.Note
+import com.anton.quicknotes2.data.NoteDatabase
+import com.anton.quicknotes2.data.NoteRepository
+import com.anton.quicknotes2.databinding.ActivityMainBinding
+import com.anton.quicknotes2.databinding.DialogNewFolderBinding
+import com.anton.quicknotes2.ui.HomeAdapter
+import com.anton.quicknotes2.ui.HomeItem
+import com.anton.quicknotes2.ui.NoteViewModel
+import com.anton.quicknotes2.ui.NoteViewModelFactory
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var adapter: HomeAdapter
+
+    private val viewModel: NoteViewModel by viewModels {
+        val db = NoteDatabase.getDatabase(applicationContext)
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao()))
+    }
+
+    private var isDragging = false
+    private var pendingIconNoteId: Int? = null
+    private var pendingIconFolderId: Int? = null
+
+    // Drag-into-folder state
+    private var highlightedCard: MaterialCardView? = null
+    private var pendingFolderTarget: Pair<Note, Folder>? = null
+    private var draggingNote: Note? = null
+
+    private fun setCardHighlight(card: MaterialCardView?) {
+        highlightedCard?.strokeColor = Color.TRANSPARENT
+        highlightedCard?.strokeWidth = 0
+        highlightedCard = card
+        card?.strokeColor = 0xFF6650A4.toInt()
+        card?.strokeWidth = 6
+    }
+
+    private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
+        pendingIconFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconFolderId = null }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
+
+        adapter = HomeAdapter(
+            onNoteClick = { note ->
+                startActivity(Intent(this, NoteEditorActivity::class.java).apply {
+                    putExtra(NoteEditorActivity.EXTRA_NOTE_ID, note.id)
+                })
+            },
+            onFolderClick = { folder ->
+                startActivity(Intent(this, FolderActivity::class.java).apply {
+                    putExtra(FolderActivity.EXTRA_FOLDER_ID, folder.id)
+                    putExtra(FolderActivity.EXTRA_FOLDER_NAME, folder.name)
+                })
+            },
+            onNoteDelete = { note ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete note")
+                    .setMessage("Are you sure you want to delete \"${note.title.ifBlank { "Untitled" }}\"?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.delete(note) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onFolderDelete = { folder ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete folder")
+                    .setMessage("Are you sure you want to delete \"${folder.name}\"?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        lifecycleScope.launch {
+                            val count = viewModel.getNotesInFolderCount(folder.id)
+                            if (count == 0) {
+                                viewModel.deleteFolder(folder)
+                            } else {
+                                MaterialAlertDialogBuilder(this@MainActivity)
+                                    .setTitle("What about the notes inside?")
+                                    .setMessage("\"${folder.name}\" contains $count note${if (count == 1) "" else "s"}. Do you want to delete them too, or move them to the home screen?")
+                                    .setPositiveButton("Delete notes") { _, _ ->
+                                        viewModel.deleteFolderAndNotes(folder)
+                                    }
+                                    .setNegativeButton("Move to home") { _, _ ->
+                                        viewModel.deleteFolderMoveNotesOut(folder)
+                                    }
+                                    .setNeutralButton("Cancel", null)
+                                    .show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onOrderChanged = { items -> viewModel.reorderHomeItems(items) },
+            onNoteIconClick = { note ->
+                pendingIconNoteId = note.id; pendingIconFolderId = null; pickIcon.launch("image/*")
+            },
+            onFolderIconClick = { folder ->
+                pendingIconFolderId = folder.id; pendingIconNoteId = null; pickIcon.launch("image/*")
+            }
+        )
+
+        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        binding.recyclerView.adapter = adapter
+
+        val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
+        ) {
+            override fun onMove(rv: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                val from = source.bindingAdapterPosition
+                val to = target.bindingAdapterPosition
+                val draggedItem = adapter.getItemAt(from)
+                val targetItem = adapter.getItemAt(to) // null when to == cancel row
+
+                if (draggedItem is HomeItem.NoteItem) draggingNote = draggedItem.note
+
+                when {
+                    // Hovering over cancel row → clear any folder highlight, return false to keep firing
+                    targetItem == null -> {
+                        if (highlightedCard != null) {
+                            setCardHighlight(null)
+                            pendingFolderTarget = null
+                        }
+                        return false
+                    }
+                    // Note hovering over a folder → highlight, return false to keep firing
+                    draggedItem is HomeItem.NoteItem && targetItem is HomeItem.FolderItem -> {
+                        val card = target.itemView as? MaterialCardView
+                        if (card != highlightedCard) {
+                            setCardHighlight(card)
+                            pendingFolderTarget = Pair(draggedItem.note, targetItem.folder)
+                        }
+                        return false
+                    }
+                    // Moving to a normal row — clear folder highlight
+                    else -> {
+                        if (highlightedCard != null) {
+                            setCardHighlight(null)
+                            pendingFolderTarget = null
+                        }
+                        isDragging = true
+                        adapter.moveItem(from, to)
+                        return true
+                    }
+                }
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(viewHolder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    // Show cancel row when drag starts
+                    if (viewHolder != null) {
+                        val pos = viewHolder.bindingAdapterPosition
+                        if (pos >= 0 && adapter.getItemAt(pos) is HomeItem.NoteItem) {
+                            adapter.isDraggingNote = true
+                        }
+                    }
+                }
+            }
+
+            override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+                super.clearView(recyclerView, viewHolder)
+                adapter.isDraggingNote = false
+                setCardHighlight(null)
+                val pending = pendingFolderTarget
+                pendingFolderTarget = null
+                draggingNote = null
+                isDragging = false
+                if (pending != null) {
+                    viewModel.update(pending.first.copy(folderId = pending.second.id))
+                } else {
+                    viewModel.reorderHomeItems(adapter.getItems())
+                }
+            }
+        })
+        touchHelper.attachToRecyclerView(binding.recyclerView)
+        adapter.itemTouchHelper = touchHelper
+
+        viewModel.allFolders.observe(this) { folders ->
+            if (isDragging) return@observe
+            val notes = viewModel.allNotes.value ?: emptyList()
+            val items = buildHomeList(folders, notes)
+            adapter.submitList(items)
+            binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        viewModel.allNotes.observe(this) { notes ->
+            if (isDragging) return@observe
+            val folders = viewModel.allFolders.value ?: emptyList()
+            val items = buildHomeList(folders, notes)
+            adapter.submitList(items)
+            binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        binding.fab.setOnClickListener { showFabMenu() }
+    }
+
+    private fun buildHomeList(folders: List<Folder>, notes: List<Note>): List<HomeItem> {
+        val combined = mutableListOf<HomeItem>()
+        folders.forEach { combined.add(HomeItem.FolderItem(it)) }
+        notes.forEach { combined.add(HomeItem.NoteItem(it)) }
+        combined.sortBy {
+            when (it) {
+                is HomeItem.NoteItem -> it.note.sortOrder
+                is HomeItem.FolderItem -> it.folder.sortOrder
+            }
+        }
+        return combined
+    }
+
+    private fun showFabMenu() {
+        val sheet = BottomSheetDialog(this)
+        val sheetView = layoutInflater.inflate(R.layout.bottom_sheet_fab, null)
+        sheet.setContentView(sheetView)
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewNote).setOnClickListener {
+            sheet.dismiss(); startActivity(Intent(this, NoteEditorActivity::class.java))
+        }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {
+            sheet.dismiss(); showNewFolderDialog()
+        }
+        sheet.show()
+    }
+
+    private fun showNewFolderDialog() {
+        val dialogBinding = DialogNewFolderBinding.inflate(LayoutInflater.from(this))
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.new_folder)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.create) { _, _ ->
+                val name = dialogBinding.editFolderName.text.toString().trim()
+                if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name))
+            }
+            .setNegativeButton(android.R.string.cancel, null).show()
+    }
+}
