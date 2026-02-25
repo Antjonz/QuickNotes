@@ -15,11 +15,11 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <!-- Teal left accent strip for Notes -->
+        <!-- Blue left accent strip for Lists -->
         <View
             android:layout_width="5dp"
             android:layout_height="match_parent"
-            android:background="#FF00897B" />
+            android:background="#FF1565C0" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -46,7 +46,7 @@
                 android:background="@drawable/icon_placeholder_bg"
                 android:clipToOutline="true"
                 android:src="@drawable/ic_note_default"
-                android:contentDescription="Note icon" />
+                android:contentDescription="List icon" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -58,11 +58,11 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Note"
+                    android:text="List"
                     android:textSize="10sp"
                     android:textAllCaps="true"
                     android:letterSpacing="0.08"
-                    android:textColor="#FF00897B"
+                    android:textColor="#FF1565C0"
                     android:fontFamily="sans-serif-medium" />
 
                 <TextView
@@ -72,16 +72,6 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-                <TextView
-                    android:id="@+id/textBody"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <TextView
                     android:id="@+id/textTimestamp"
@@ -97,10 +87,10 @@
                 android:id="@+id/btnDelete"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="4dp"
                 android:src="@drawable/ic_delete"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Delete note"
+                android:contentDescription="Delete list"
                 app:tint="@color/delete_red" />
 
         </LinearLayout>

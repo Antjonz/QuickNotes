@@ -12,6 +12,7 @@ import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.Whiteboard
 import com.anton.quicknotes2.databinding.ItemFolderBinding
+import com.anton.quicknotes2.databinding.ItemListBinding
 import com.anton.quicknotes2.databinding.ItemNoteBinding
 import com.anton.quicknotes2.databinding.ItemWhiteboardBinding
 import java.text.SimpleDateFormat
@@ -184,7 +185,7 @@ class FolderAdapter(
         }
     }
 
-    inner class ListViewHolder(private val binding: ItemWhiteboardBinding) :
+    inner class ListViewHolder(private val binding: ItemListBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(list: NoteList) {
             binding.textTitle.text = list.title.ifBlank { "Untitled list" }
@@ -212,7 +213,7 @@ class FolderAdapter(
             ) {}
             TYPE_WHITEBOARD -> WhiteboardViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
             TYPE_FOLDER -> SubFolderViewHolder(ItemFolderBinding.inflate(inflater, parent, false))
-            TYPE_LIST -> ListViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
+            TYPE_LIST -> ListViewHolder(ItemListBinding.inflate(inflater, parent, false))
             else -> NoteViewHolder(ItemNoteBinding.inflate(inflater, parent, false))
         }
     }
