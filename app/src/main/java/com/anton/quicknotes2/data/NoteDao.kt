@@ -27,6 +27,12 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE folderId IS NULL ORDER BY sortOrder ASC")
     suspend fun getAllNotesDirect(): List<Note>
 
+    @Query("SELECT * FROM notes ORDER BY sortOrder ASC")
+    suspend fun getAllNotesAllLevelsDirect(): List<Note>
+
     @Query("SELECT * FROM notes WHERE folderId = :folderId ORDER BY sortOrder ASC")
     suspend fun getNotesInFolderDirect(folderId: Int): List<Note>
+
+    @Query("DELETE FROM notes")
+    suspend fun deleteAll()
 }

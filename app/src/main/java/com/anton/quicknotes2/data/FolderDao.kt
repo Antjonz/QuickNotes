@@ -38,4 +38,7 @@ interface FolderDao {
 
     @Query("SELECT * FROM folders ORDER BY sortOrder ASC")
     suspend fun getAllFoldersAllLevelsDirect(): List<Folder>
+
+    @Query("DELETE FROM folders")
+    suspend fun deleteAll()
 }

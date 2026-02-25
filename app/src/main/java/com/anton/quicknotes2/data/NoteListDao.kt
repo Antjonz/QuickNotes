@@ -13,6 +13,12 @@ interface NoteListDao {
     @Query("SELECT * FROM note_lists WHERE folderId IS NULL ORDER BY sortOrder ASC")
     suspend fun getAllListsDirect(): List<NoteList>
 
+    @Query("SELECT * FROM note_lists ORDER BY sortOrder ASC")
+    suspend fun getAllListsAllLevelsDirect(): List<NoteList>
+
+    @Query("DELETE FROM note_lists")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM note_lists WHERE folderId = :folderId ORDER BY sortOrder ASC")
     fun getListsInFolder(folderId: Int): LiveData<List<NoteList>>
 

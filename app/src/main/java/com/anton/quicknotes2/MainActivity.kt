@@ -3,6 +3,9 @@ package com.anton.quicknotes2
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +44,42 @@ class MainActivity : AppCompatActivity() {
     private var pendingIconFolderId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
     private var pendingIconListId: Int? = null
+
+    // Export/import
+    private var pendingExportIncludeImages = false
+    private val exportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            try {
+                val db = NoteDatabase.getDatabase(applicationContext)
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    ExportImportManager.export(db, out, pendingExportIncludeImages, this@MainActivity)
+                }
+                Toast.makeText(this@MainActivity, "Export successful", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    private var pendingImportClearExisting = false
+    private val importLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            try {
+                val db = NoteDatabase.getDatabase(applicationContext)
+                contentResolver.openInputStream(uri)?.use { input ->
+                    ExportImportManager.import(db, input, pendingImportClearExisting, this@MainActivity)
+                }
+                Toast.makeText(this@MainActivity, "Import successful", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     // The card currently highlighted as "pending move into folder" (the dragged item)
     private var highlightedCard: MaterialCardView? = null
@@ -327,5 +366,106 @@ class MainActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name))
             }
             .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        // Tint icon white so it's visible on the purple toolbar
+        menu.findItem(R.id.action_export_import)?.icon?.setTint(android.graphics.Color.WHITE)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_export_import) {
+            showExportImportChooser()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    // ── Export / Import dialogs ────────────────────────────────────────────────
+
+    private fun showExportImportChooser() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Export / Import")
+            .setMessage("What would you like to do?")
+            .setPositiveButton("Export") { _, _ -> showExportConfirmation() }
+            .setNegativeButton("Import") { _, _ -> showImportOptions() }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    private fun showExportConfirmation() {
+        val db = NoteDatabase.getDatabase(applicationContext)
+        lifecycleScope.launch {
+            val jsonSize = ExportImportManager.estimateJsonSize(db)
+            val imgSize  = ExportImportManager.estimateImagesSize(db, this@MainActivity)
+            val jsonStr  = ExportImportManager.formatBytes(jsonSize)
+            val totalStr = ExportImportManager.formatBytes(jsonSize + imgSize)
+
+            // Check if there is actually anything to export
+            val hasData = db.noteDao().getAllNotesAllLevelsDirect().isNotEmpty() ||
+                          db.folderDao().getAllFoldersAllLevelsDirect().isNotEmpty() ||
+                          db.whiteboardDao().getAllWhiteboardsAllLevelsDirect().isNotEmpty() ||
+                          db.noteListDao().getAllListsAllLevelsDirect().isNotEmpty()
+
+            if (!hasData) {
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle("Nothing to export")
+                    .setMessage("There are no notes, folders, lists or whiteboards to export. Create some content first.")
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                return@launch
+            }
+
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle("Export data")
+                .setMessage(
+                    "Your notes, folders, lists and whiteboards will be saved to a .qnbackup file.\n\n" +
+                    "File size without pictures: $jsonStr\n" +
+                    "File size with pictures: $totalStr\n\n" +
+                    "Include pictures in the export?"
+                )
+                .setPositiveButton("Include pictures") { _, _ ->
+                    pendingExportIncludeImages = true
+                    exportLauncher.launch("quicknotes_backup.qnbackup")
+                }
+                .setNegativeButton("Without pictures") { _, _ ->
+                    pendingExportIncludeImages = false
+                    exportLauncher.launch("quicknotes_backup.qnbackup")
+                }
+                .setNeutralButton("Cancel", null)
+                .show()
+        }
+    }
+
+    private fun showImportOptions() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Import data")
+            .setMessage("What should happen to your current notes, folders, lists and whiteboards?")
+            .setPositiveButton("Delete current data") { _, _ ->
+                confirmImport(clearExisting = true)
+            }
+            .setNegativeButton("Keep current data") { _, _ ->
+                confirmImport(clearExisting = false)
+            }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmImport(clearExisting: Boolean) {
+        val msg = if (clearExisting)
+            "All current data will be permanently deleted and replaced with the backup. Are you sure?"
+        else
+            "The backup will be added on top of your current data. Continue?"
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Confirm import")
+            .setMessage(msg)
+            .setPositiveButton("Import") { _, _ ->
+                pendingImportClearExisting = clearExisting
+                importLauncher.launch(arrayOf("*/*"))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

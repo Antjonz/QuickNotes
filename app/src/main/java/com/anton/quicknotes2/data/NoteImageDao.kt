@@ -20,5 +20,11 @@ interface NoteImageDao {
 
     @Delete
     suspend fun delete(image: NoteImage)
+
+    @Query("SELECT * FROM note_images ORDER BY sortOrder ASC")
+    suspend fun getAllImagesDirect(): List<NoteImage>
+
+    @Query("DELETE FROM note_images")
+    suspend fun deleteAll()
 }
 

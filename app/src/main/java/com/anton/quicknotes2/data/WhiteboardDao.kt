@@ -12,6 +12,12 @@ interface WhiteboardDao {
     @Query("SELECT * FROM whiteboards WHERE folderId IS NULL ORDER BY sortOrder ASC")
     suspend fun getAllWhiteboardsDirect(): List<Whiteboard>
 
+    @Query("SELECT * FROM whiteboards ORDER BY sortOrder ASC")
+    suspend fun getAllWhiteboardsAllLevelsDirect(): List<Whiteboard>
+
+    @Query("DELETE FROM whiteboards")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM whiteboards WHERE folderId = :folderId ORDER BY sortOrder ASC")
     fun getWhiteboardsInFolder(folderId: Int): LiveData<List<Whiteboard>>
 
