@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- List / checklist icon: three rows each with a small checkbox and a line -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Row 1: checkbox tick -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M4,6h2v2H4V6zM4,11h2v2H4v-2zM4,16h2v2H4v-2zM20,8v-2H8v2H20zM20,13v-2H8v2H20zM20,18v-2H8v2H20z"/>
+    <!-- Checkmark on first row -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M5,6.5L4.3,7.2l0.7,0.7 1.5,-1.5L6,5.9 5,6.5z"/>
+</vector>
+

@@ -6,13 +6,13 @@ An Android note-taking app where you can create notes, lists, whiteboards and fo
 
 ## Screenshots
 
-<div style="overflow-x: auto; white-space: nowrap; padding: 8px 0;">
-  <img src="screenshots/01.png" height="480" style="display:inline-block; margin-right:8px;" />
-  <img src="screenshots/02.png" height="480" style="display:inline-block; margin-right:8px;" />
-  <img src="screenshots/03.png" height="480" style="display:inline-block; margin-right:8px;" />
-  <img src="screenshots/04.png" height="480" style="display:inline-block; margin-right:8px;" />
-  <img src="screenshots/05.png" height="480" style="display:inline-block; margin-right:8px;" />
-  <img src="screenshots/06.png" height="480" style="display:inline-block;" />
+<div align="center">
+  <img src="screenshots/01.png" height="480" style="margin-right:8px;" />
+  <img src="screenshots/02.png" height="480" style="margin-right:8px;" />
+  <img src="screenshots/03.png" height="480" style="margin-right:8px;" />
+  <img src="screenshots/04.png" height="480" style="margin-right:8px;" />
+  <img src="screenshots/05.png" height="480" style="margin-right:8px;" />
+  <img src="screenshots/06.png" height="480" />
 </div>
 
 ---

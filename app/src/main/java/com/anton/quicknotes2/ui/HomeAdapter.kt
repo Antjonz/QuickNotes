@@ -173,7 +173,7 @@ class HomeAdapter(
             binding.btnDelete.setOnClickListener { onWhiteboardDelete(wb) }
             binding.itemIcon.setOnClickListener { onWhiteboardIconClick(wb) }
             if (wb.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(wb.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_whiteboard_default)
             binding.dragHandle.setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
                 false
@@ -190,7 +190,7 @@ class HomeAdapter(
             binding.btnDelete.setOnClickListener { onListDelete(list) }
             binding.itemIcon.setOnClickListener { onListIconClick(list) }
             if (list.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(list.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_list_default)
             binding.dragHandle.setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
                 false

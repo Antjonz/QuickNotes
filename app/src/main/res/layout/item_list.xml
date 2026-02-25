@@ -45,7 +45,7 @@
                 android:scaleType="centerCrop"
                 android:background="@drawable/icon_placeholder_bg"
                 android:clipToOutline="true"
-                android:src="@drawable/ic_note_default"
+                android:src="@drawable/ic_list_default"
                 android:contentDescription="List icon" />
 
             <LinearLayout

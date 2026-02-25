@@ -45,7 +45,7 @@
                 android:scaleType="centerCrop"
                 android:background="@drawable/icon_placeholder_bg"
                 android:clipToOutline="true"
-                android:src="@drawable/ic_note_default"
+                android:src="@drawable/ic_whiteboard_default"
                 android:contentDescription="Whiteboard icon" />
 
             <LinearLayout
