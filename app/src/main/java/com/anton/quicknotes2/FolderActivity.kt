@@ -168,12 +168,7 @@ class FolderActivity : AppCompatActivity() {
                 showIconOptionsDialog(
                     onPickImage = { pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") },
                     onPickColor = { color -> viewModel.updateFolderIcon(folder.id, "color:$color") },
-                    onResetDefault = { viewModel.updateFolderIcon(folder.id, null) },
-                    onChangeLabelColor = {
-                        ColorPickerDialog.show(this, folder.labelColor) { color ->
-                            viewModel.updateFolderLabelColor(folder.id, color)
-                        }
-                    }
+                    onResetDefault = { viewModel.updateFolderIcon(folder.id, null) }
                 )
             },
             onListClick = { list ->

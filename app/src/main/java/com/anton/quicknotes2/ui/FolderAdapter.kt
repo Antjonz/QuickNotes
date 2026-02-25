@@ -276,8 +276,16 @@ class FolderAdapter(
     private fun applyIconUri(imageView: ImageView, iconUri: String?, @DrawableRes fallback: Int) {
         if (iconUri != null) {
             if (iconUri.startsWith("color:")) {
-                imageView.setImageDrawable(null)
-                try { imageView.setBackgroundColor(Color.parseColor(iconUri.removePrefix("color:"))) } catch (_: Exception) {}
+                try {
+                    val color = Color.parseColor(iconUri.removePrefix("color:"))
+                    val bg = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                        cornerRadius = 8f * imageView.resources.displayMetrics.density
+                        setColor(color)
+                    }
+                    imageView.setImageDrawable(null)
+                    imageView.background = bg
+                } catch (_: Exception) {}
             } else imageView.setImageURISafe(iconUri, fallback)
         } else {
             imageView.setImageResource(fallback)

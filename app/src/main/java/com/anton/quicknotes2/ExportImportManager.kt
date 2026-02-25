@@ -26,18 +26,30 @@ object ExportImportManager {
     suspend fun estimateImagesSize(db: NoteDatabase, context: Context): Long =
         withContext(Dispatchers.IO) {
             var total = 0L
+            // Note body images
             db.noteImageDao().getAllImagesDirect().forEach { img ->
-                try {
-                    val bytes = context.contentResolver
-                        .openInputStream(Uri.parse(img.uri))?.readBytes() ?: return@forEach
-                    // Base64 is ~4/3 of raw size
-                    total += (bytes.size * 4L / 3L) + 4L
-                } catch (_: Exception) {}
+                total += encodedSize(context, img.uri)
+            }
+            // Icon images for all entity types
+            val allIconUris = mutableListOf<String?>()
+            db.noteDao().getAllNotesAllLevelsDirect().forEach { allIconUris += it.iconUri }
+            db.folderDao().getAllFoldersAllLevelsDirect().forEach { allIconUris += it.iconUri }
+            db.whiteboardDao().getAllWhiteboardsAllLevelsDirect().forEach { allIconUris += it.iconUri }
+            db.noteListDao().getAllListsAllLevelsDirect().forEach { allIconUris += it.iconUri }
+            allIconUris.forEach { uri ->
+                if (uri != null && !uri.startsWith("color:")) total += encodedSize(context, uri)
             }
             total
         }
 
-    // ── Export ─────────────────────────────────────────────────────────────────
+    private fun encodedSize(context: Context, uri: String): Long {
+        return try {
+            val bytes = context.contentResolver.openInputStream(Uri.parse(uri))?.readBytes() ?: return 0L
+            (bytes.size * 4L / 3L) + 4L
+        } catch (_: Exception) { 0L }
+    }
+
+    // ── Export ────────────────────────────────────────────────────────────────
 
     suspend fun export(
         db: NoteDatabase,
@@ -46,7 +58,16 @@ object ExportImportManager {
         context: Context
     ): Unit = withContext(Dispatchers.IO) {
         val json = buildJson(db, includeImages, context)
-        outputStream.bufferedWriter().use { writer -> writer.write(json.toString(2)) }
+        outputStream.bufferedWriter().use { it.write(json.toString(2)) }
+    }
+
+    /** Encode an iconUri to base64 if it's an image (not a color: value). Returns null if not applicable. */
+    private fun encodeIconToBase64(context: Context?, uri: String?): String? {
+        if (uri == null || uri.startsWith("color:") || context == null) return null
+        return try {
+            val bytes = context.contentResolver.openInputStream(Uri.parse(uri))?.readBytes() ?: return null
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (_: Exception) { null }
     }
 
     private suspend fun buildJson(
@@ -55,7 +76,7 @@ object ExportImportManager {
         context: Context?
     ): JSONObject {
         val root = JSONObject()
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportedAt", System.currentTimeMillis())
         root.put("includesImages", includeImages)
 
@@ -66,6 +87,7 @@ object ExportImportManager {
                 put("id", f.id); put("name", f.name); put("timestamp", f.timestamp)
                 put("sortOrder", f.sortOrder); putOpt("iconUri", f.iconUri)
                 putOpt("parentFolderId", f.parentFolderId); putOpt("labelColor", f.labelColor)
+                if (includeImages) putOpt("iconBase64", encodeIconToBase64(context, f.iconUri))
             })
         }
         root.put("folders", foldersArr)
@@ -81,10 +103,8 @@ object ExportImportManager {
                 }
                 if (includeImages && context != null) {
                     try {
-                        val bytes = context.contentResolver
-                            .openInputStream(Uri.parse(img.uri))?.readBytes()
-                        if (bytes != null)
-                            imgObj.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                        val bytes = context.contentResolver.openInputStream(Uri.parse(img.uri))?.readBytes()
+                        if (bytes != null) imgObj.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
                     } catch (_: Exception) {}
                 }
                 images.put(imgObj)
@@ -94,6 +114,7 @@ object ExportImportManager {
                 put("timestamp", note.timestamp); put("sortOrder", note.sortOrder)
                 putOpt("folderId", note.folderId); putOpt("iconUri", note.iconUri)
                 putOpt("labelColor", note.labelColor)
+                if (includeImages) putOpt("iconBase64", encodeIconToBase64(context, note.iconUri))
                 put("images", images)
             })
         }
@@ -107,6 +128,7 @@ object ExportImportManager {
                 put("timestamp", wb.timestamp); put("sortOrder", wb.sortOrder)
                 putOpt("folderId", wb.folderId); putOpt("iconUri", wb.iconUri)
                 putOpt("labelColor", wb.labelColor)
+                if (includeImages) putOpt("iconBase64", encodeIconToBase64(context, wb.iconUri))
             })
         }
         root.put("whiteboards", wbsArr)
@@ -125,6 +147,7 @@ object ExportImportManager {
                 put("id", l.id); put("title", l.title); put("timestamp", l.timestamp)
                 put("sortOrder", l.sortOrder); putOpt("folderId", l.folderId)
                 putOpt("iconUri", l.iconUri); putOpt("labelColor", l.labelColor)
+                if (includeImages) putOpt("iconBase64", encodeIconToBase64(context, l.iconUri))
                 put("items", itemsArr)
             })
         }
@@ -143,7 +166,7 @@ object ExportImportManager {
         return root
     }
 
-    // ── Import ─────────────────────────────────────────────────────────────────
+    // ── Import ────────────────────────────────────────────────────────────────
 
     suspend fun import(
         db: NoteDatabase,
@@ -156,12 +179,8 @@ object ExportImportManager {
             throw Exception("Invalid backup file: ${e.message}")
         }
 
-        // Run everything inside a single Room transaction so a mid-import crash
-        // cannot leave the database in a broken state.
         db.withTransaction {
             if (clearExisting) {
-                // Disable FK constraints so we can wipe tables in any order
-                // (folders self-reference via parentFolderId which would violate FK on DELETE)
                 db.openHelper.writableDatabase.execSQL("PRAGMA foreign_keys = OFF")
                 db.noteListDao().deleteAll()
                 db.whiteboardDao().deleteAll()
@@ -187,7 +206,7 @@ object ExportImportManager {
                         name = obj.optString("name", "Folder"),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         sortOrder = obj.optInt("sortOrder", 0),
-                        iconUri = obj.optString("iconUri").ifEmpty { null },
+                        iconUri = resolveIconUri(context, obj, prefix = "folder_icon"),
                         parentFolderId = newParent,
                         labelColor = obj.optString("labelColor").ifEmpty { null }
                     )
@@ -208,7 +227,7 @@ object ExportImportManager {
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         folderId = if (oldFolder != null) folderIdMap[oldFolder] else null,
                         sortOrder = obj.optInt("sortOrder", 0),
-                        iconUri = obj.optString("iconUri").ifEmpty { null },
+                        iconUri = resolveIconUri(context, obj, prefix = "note_icon"),
                         labelColor = obj.optString("labelColor").ifEmpty { null }
                     )
                 ).toInt()
@@ -220,21 +239,16 @@ object ExportImportManager {
                     val resolvedUri = if (b64 != null) {
                         try {
                             val bytes = Base64.decode(b64, Base64.NO_WRAP)
-                            val file = File(
-                                context.filesDir,
-                                "img_${newNoteId}_${imgObj.optInt("sortOrder", j)}_${System.currentTimeMillis()}.jpg"
-                            )
+                            val file = File(context.filesDir,
+                                "img_${newNoteId}_${imgObj.optInt("sortOrder", j)}_${System.currentTimeMillis()}.jpg")
                             file.writeBytes(bytes)
                             Uri.fromFile(file).toString()
                         } catch (_: Exception) { imgObj.optString("uri", "") }
                     } else imgObj.optString("uri", "")
                     if (resolvedUri.isNotEmpty()) {
                         db.noteImageDao().insert(
-                            NoteImage(
-                                id = 0, noteId = newNoteId,
-                                uri = resolvedUri,
-                                sortOrder = imgObj.optInt("sortOrder", j)
-                            )
+                            NoteImage(id = 0, noteId = newNoteId,
+                                uri = resolvedUri, sortOrder = imgObj.optInt("sortOrder", j))
                         )
                     }
                 }
@@ -253,7 +267,7 @@ object ExportImportManager {
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         folderId = if (oldFolder != null) folderIdMap[oldFolder] else null,
                         sortOrder = obj.optInt("sortOrder", 0),
-                        iconUri = obj.optString("iconUri").ifEmpty { null },
+                        iconUri = resolveIconUri(context, obj, prefix = "wb_icon"),
                         labelColor = obj.optString("labelColor").ifEmpty { null }
                     )
                 )
@@ -271,35 +285,30 @@ object ExportImportManager {
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         folderId = if (oldFolder != null) folderIdMap[oldFolder] else null,
                         sortOrder = obj.optInt("sortOrder", 0),
-                        iconUri = obj.optString("iconUri").ifEmpty { null },
+                        iconUri = resolveIconUri(context, obj, prefix = "list_icon"),
                         labelColor = obj.optString("labelColor").ifEmpty { null }
                     )
                 ).toInt()
                 val items = obj.optJSONArray("items") ?: JSONArray()
                 for (j in 0 until items.length()) {
                     val it2 = items.getJSONObject(j)
-                    // getBoolean throws on integer 0/1 — use optBoolean which handles both
                     val checked = it2.optBoolean("checked", false)
                     db.noteListDao().insertItem(
-                        NoteListItem(
-                            id = 0, listId = newListId,
+                        NoteListItem(id = 0, listId = newListId,
                             text = it2.optString("text", ""),
-                            position = it2.optInt("position", j),
-                            checked = checked
-                        )
+                            position = it2.optInt("position", j), checked = checked)
                     )
                 }
             }
 
-            // Dividers (only present in backups made after this feature was added)
+            // Dividers
             val dividersArr = root.optJSONArray("dividers") ?: JSONArray()
             for (i in 0 until dividersArr.length()) {
                 val obj = dividersArr.getJSONObject(i)
                 val oldFolder = obj.optInt("folderId", -1).takeIf { it != -1 }
                 db.dividerDao().insert(
                     com.anton.quicknotes2.data.Divider(
-                        id = 0,
-                        label = obj.optString("label", ""),
+                        id = 0, label = obj.optString("label", ""),
                         folderId = if (oldFolder != null) folderIdMap[oldFolder] else null,
                         sortOrder = obj.optInt("sortOrder", 0)
                     )
@@ -308,12 +317,35 @@ object ExportImportManager {
         }
     }
 
+    /**
+     * Resolve an iconUri from a JSON object.
+     * - If "iconBase64" is present: decode to a local file and return its URI.
+     * - If "iconUri" starts with "color:": return it as-is.
+     * - Otherwise: return the raw "iconUri" string (may be stale on a different device,
+     *   but is the best we can do without images included in the export).
+     */
+    private fun resolveIconUri(context: Context, obj: JSONObject, prefix: String): String? {
+        val rawUri = obj.optString("iconUri").ifEmpty { null }
+        // color: values need no decoding
+        if (rawUri != null && rawUri.startsWith("color:")) return rawUri
+
+        val b64 = obj.optString("iconBase64").ifEmpty { null }
+        if (b64 != null) {
+            return try {
+                val bytes = Base64.decode(b64, Base64.NO_WRAP)
+                val file = File(context.filesDir, "${prefix}_${System.currentTimeMillis()}.jpg")
+                file.writeBytes(bytes)
+                Uri.fromFile(file).toString()
+            } catch (_: Exception) { rawUri }
+        }
+        return rawUri
+    }
+
     /** Sort folders so parents always appear before their children. */
     private fun topologicallySorted(folders: List<JSONObject>): List<JSONObject> {
         val result = mutableListOf<JSONObject>()
         val remaining = folders.toMutableList()
         val inserted = mutableSetOf<Int>()
-        // Root folders first
         val queue = ArrayDeque<JSONObject>()
         remaining.filter { it.optInt("parentFolderId", -1) == -1 }.forEach { queue.add(it) }
         remaining.removeAll { it.optInt("parentFolderId", -1) == -1 }
@@ -325,7 +357,7 @@ object ExportImportManager {
             children.forEach { queue.add(it) }
             remaining.removeAll { it.optInt("parentFolderId", -1) == fId }
         }
-        result.addAll(remaining) // any orphans
+        result.addAll(remaining)
         return result
     }
 
@@ -335,4 +367,3 @@ object ExportImportManager {
         else -> "${"%.2f".format(bytes / (1024.0 * 1024.0))} MB"
     }
 }
-
