@@ -3,6 +3,7 @@ package com.anton.quicknotes2.ui
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anton.quicknotes2.data.Divider
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteImage
@@ -23,10 +24,11 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     suspend fun getNoteById(id: Int): Note? = repository.getNoteById(id)
     fun updateNoteIcon(noteId: Int, uri: String?) =
         viewModelScope.launch { repository.updateNoteIcon(noteId, uri) }
+    fun updateNoteLabelColor(noteId: Int, color: String?) =
+        viewModelScope.launch { repository.updateNoteLabelColor(noteId, color) }
 
     fun getNotesInFolder(folderId: Int): LiveData<List<Note>> =
         repository.getNotesInFolder(folderId)
-
 
     fun reorderNotesInFolder(notes: List<Note>) =
         viewModelScope.launch { repository.reorderNotesInFolder(notes) }
@@ -49,6 +51,8 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     suspend fun getFolderById(id: Int): Folder? = repository.getFolderById(id)
     fun updateFolderIcon(folderId: Int, uri: String?) =
         viewModelScope.launch { repository.updateFolderIcon(folderId, uri) }
+    fun updateFolderLabelColor(folderId: Int, color: String?) =
+        viewModelScope.launch { repository.updateFolderLabelColor(folderId, color) }
 
     // ── Images ─────────────────────────────────────────────
     fun getImagesForNote(noteId: Int): LiveData<List<NoteImage>> =
@@ -68,6 +72,7 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun updateWhiteboard(wb: Whiteboard) = viewModelScope.launch { repository.updateWhiteboard(wb) }
     fun deleteWhiteboard(wb: Whiteboard) = viewModelScope.launch { repository.deleteWhiteboard(wb) }
     fun updateWhiteboardIcon(id: Int, uri: String?) = viewModelScope.launch { repository.updateWhiteboardIcon(id, uri) }
+    fun updateWhiteboardLabelColor(id: Int, color: String?) = viewModelScope.launch { repository.updateWhiteboardLabelColor(id, color) }
     fun reorderHomeItems(items: List<HomeItem>) =
         viewModelScope.launch { repository.reorderHomeItemsWithWhiteboards(items) }
 
@@ -79,11 +84,19 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     fun updateList(list: NoteList) = viewModelScope.launch { repository.updateList(list) }
     fun deleteList(list: NoteList) = viewModelScope.launch { repository.deleteList(list) }
     fun updateListIcon(id: Int, uri: String?) = viewModelScope.launch { repository.updateListIcon(id, uri) }
+    fun updateListLabelColor(id: Int, color: String?) = viewModelScope.launch { repository.updateListLabelColor(id, color) }
 
     fun getItemsForList(listId: Int) = repository.getItemsForList(listId)
     suspend fun getItemsForListDirect(listId: Int) = repository.getItemsForListDirect(listId)
     suspend fun insertListItem(item: NoteListItem) = repository.insertListItem(item)
     suspend fun updateListItem(item: NoteListItem) = repository.updateListItem(item)
     suspend fun deleteListItem(item: NoteListItem) = repository.deleteListItem(item)
-}
 
+    // ── Dividers ───────────────────────────────────────────
+    val allDividers = repository.allDividers
+    fun getDividersInFolder(folderId: Int) = repository.getDividersInFolder(folderId)
+    suspend fun getDividerById(id: Int) = repository.getDividerById(id)
+    suspend fun insertDivider(divider: Divider) = repository.insertDivider(divider)
+    fun updateDivider(divider: Divider) = viewModelScope.launch { repository.updateDivider(divider) }
+    fun deleteDivider(divider: Divider) = viewModelScope.launch { repository.deleteDivider(divider) }
+}

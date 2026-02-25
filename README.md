@@ -50,15 +50,27 @@ Each card has a coloured left stripe so you always know what you're looking at:
 - 🔵 **List** — blue stripe
 - 🟣 **Whiteboard** — purple stripe
 - **Folder** — dark gray card (no stripe)
+- **Divider** — a thin horizontal line with an optional label; drag it just like any other item to organize your screen
 
 ### Custom icons
-- Tap the small square icon on any note, list, whiteboard or folder card to set a custom image for it
+- Tap the small square icon on any note, list, whiteboard or folder card
+- A popup asks whether you want to use **a picture**, **a solid color**, or **reset to the default icon**
 - The image is cropped to a square
+
+### Note label color
+- Long-press any note card to bring up a color palette
+- Pick a color to tint the whole card background
+- Tap the white swatch to reset to the default white
+
+### Text formatting in notes
+- When editing a note, select some text and tap **B** (bold), **I** (italic), or **U** (underline) in the toolbar to format it
+- Tap again while the text is selected to remove the formatting
 
 ### Adding things
 - Tap the **+** button at the bottom right of any screen
-- A menu pops up: New note, New list, New whiteboard, or New folder
+- A menu pops up: New note, New list, New whiteboard, New folder, or **New divider**
 - Inside a folder the same menu appears
+- A divider is a purely visual separator — give it a name or leave it blank
 
 ### Deleting
 - Every card has a red delete button (trash icon)
@@ -91,11 +103,12 @@ Each card has a coloured left stripe so you always know what you're looking at:
 - If there's nothing to export, you'll see a warning
 - If there is data, the app shows you the file size without pictures and with pictures
 - Choose whether to include pictures or not, then pick where to save the `.qnbackup` file
+- The backup includes notes (with rich text), lists, whiteboards, folders, dividers, custom icon URIs, and label colors
 
 **Import:**
 - Choose whether to delete your current data first or keep it and merge
 - Confirm, then pick a `.qnbackup` file
-- Everything is restored — folders, notes, lists, whiteboards, photos and all
+- Everything is restored — folders, notes, lists, whiteboards, dividers, photos and all
 
 ---
 

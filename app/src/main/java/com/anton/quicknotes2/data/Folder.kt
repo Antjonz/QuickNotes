@@ -22,6 +22,7 @@ data class Folder(
     val timestamp: Long = System.currentTimeMillis(),
     val sortOrder: Int = 0,
     val iconUri: String? = null,
-    val parentFolderId: Int? = null
+    val parentFolderId: Int? = null,
+    val labelColor: String? = null
 )
 

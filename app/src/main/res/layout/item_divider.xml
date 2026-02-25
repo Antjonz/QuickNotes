@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="2dp"
+    android:orientation="vertical"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- Label row: only visible when the divider has a label -->
+    <LinearLayout
+        android:id="@+id/labelRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/dragHandle"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_drag_handle"
+            android:contentDescription="@null"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/textDividerLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- The divider line sits inline to the right of the label -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="?attr/colorOutlineVariant"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- No-label row: drag handle overlaid on the line so the line goes through the middle -->
+    <FrameLayout
+        android:id="@+id/noLabelRow"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:visibility="visible">
+
+        <!-- The line, centered vertically -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- Drag handle overlaid on left, centred vertically -->
+        <ImageView
+            android:id="@+id/dragHandleNoLabel"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_drag_handle"
+            android:contentDescription="@null"
+            android:background="#FFFFFFFF"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
+    </FrameLayout>
+
+    <!-- Labelled divider line: shown below the label row -->
+    <View
+        android:id="@+id/labelDividerLine"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="40dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="6dp"
+        android:background="?attr/colorOutlineVariant"
+        android:visibility="gone" />
+
+</LinearLayout>

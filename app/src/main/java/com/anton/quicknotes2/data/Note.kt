@@ -23,5 +23,6 @@ data class Note(
     val timestamp: Long = System.currentTimeMillis(),
     val folderId: Int? = null,
     val sortOrder: Int = 0,
-    val iconUri: String? = null
+    val iconUri: String? = null,
+    val labelColor: String? = null
 )

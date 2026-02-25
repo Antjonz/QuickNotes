@@ -14,6 +14,8 @@ import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.NoteDatabase
 import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.NoteRepository
+import com.anton.quicknotes2.data.Divider
+import com.anton.quicknotes2.ui.ColorPickerDialog
 import com.anton.quicknotes2.databinding.ActivityFolderBinding
 import com.anton.quicknotes2.databinding.DialogNewFolderBinding
 import com.anton.quicknotes2.ui.FolderAdapter
@@ -50,10 +52,11 @@ class FolderActivity : AppCompatActivity() {
     private var latestWhiteboards = emptyList<com.anton.quicknotes2.data.Whiteboard>()
     private var latestSubFolders = emptyList<Folder>()
     private var latestLists = emptyList<NoteList>()
+    private var latestDividers = emptyList<Divider>()
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao()))
     }
 
     private fun setCardHighlight(card: MaterialCardView?) {
@@ -117,7 +120,18 @@ class FolderActivity : AppCompatActivity() {
                     .setNegativeButton("Cancel", null).show()
             },
             onOrderChanged = { notes -> viewModel.reorderNotesInFolder(notes) },
-            onNoteIconClick = { note -> pendingIconNoteId = note.id; pickIcon.launch("image/*") },
+            onNoteIconClick = { note ->
+                showIconOptionsDialog(
+                    onPickImage = { pendingIconNoteId = note.id; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateNoteIcon(note.id, "color:$color") },
+                    onResetDefault = { viewModel.updateNoteIcon(note.id, null) },
+                    onChangeLabelColor = {
+                        ColorPickerDialog.show(this, note.labelColor) { color ->
+                            viewModel.updateNoteLabelColor(note.id, color)
+                        }
+                    }
+                )
+            },
             onMoveOutOfFolder = { note -> viewModel.update(note.copy(folderId = null)) },
             onWhiteboardClick = { wb ->
                 startActivity(Intent(this, WhiteboardEditorActivity::class.java).apply {
@@ -131,7 +145,18 @@ class FolderActivity : AppCompatActivity() {
                     .setPositiveButton("Delete") { _, _ -> viewModel.deleteWhiteboard(wb) }
                     .setNegativeButton("Cancel", null).show()
             },
-            onWhiteboardIconClick = { wb -> pendingIconWhiteboardId = wb.id; pickIcon.launch("image/*") },
+            onWhiteboardIconClick = { wb ->
+                showIconOptionsDialog(
+                    onPickImage = { pendingIconWhiteboardId = wb.id; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateWhiteboardIcon(wb.id, "color:$color") },
+                    onResetDefault = { viewModel.updateWhiteboardIcon(wb.id, null) },
+                    onChangeLabelColor = {
+                        ColorPickerDialog.show(this, wb.labelColor) { color ->
+                            viewModel.updateWhiteboardLabelColor(wb.id, color)
+                        }
+                    }
+                )
+            },
             onSubFolderClick = { folder ->
                 startActivity(Intent(this, FolderActivity::class.java).apply {
                     putExtra(EXTRA_FOLDER_ID, folder.id)
@@ -139,7 +164,18 @@ class FolderActivity : AppCompatActivity() {
                 })
             },
             onSubFolderDelete = { folder -> showDeleteFolderDialog(folder) },
-            onSubFolderIconClick = { folder -> pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") },
+            onSubFolderIconClick = { folder ->
+                showIconOptionsDialog(
+                    onPickImage = { pendingIconSubFolderId = folder.id; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateFolderIcon(folder.id, "color:$color") },
+                    onResetDefault = { viewModel.updateFolderIcon(folder.id, null) },
+                    onChangeLabelColor = {
+                        ColorPickerDialog.show(this, folder.labelColor) { color ->
+                            viewModel.updateFolderLabelColor(folder.id, color)
+                        }
+                    }
+                )
+            },
             onListClick = { list ->
                 startActivity(Intent(this, ListEditorActivity::class.java).apply {
                     putExtra(ListEditorActivity.EXTRA_LIST_ID, list.id)
@@ -152,7 +188,26 @@ class FolderActivity : AppCompatActivity() {
                     .setPositiveButton("Delete") { _, _ -> viewModel.deleteList(list) }
                     .setNegativeButton("Cancel", null).show()
             },
-            onListIconClick = { list -> pendingIconListId = list.id; pickIcon.launch("image/*") }
+            onListIconClick = { list ->
+                showIconOptionsDialog(
+                    onPickImage = { pendingIconListId = list.id; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateListIcon(list.id, "color:$color") },
+                    onResetDefault = { viewModel.updateListIcon(list.id, null) },
+                    onChangeLabelColor = {
+                        ColorPickerDialog.show(this, list.labelColor) { color ->
+                            viewModel.updateListLabelColor(list.id, color)
+                        }
+                    }
+                )
+            },
+            onDividerDelete = { divider ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete divider")
+                    .setMessage("Are you sure you want to delete this divider?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteDivider(divider) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onDividerRename = { divider -> showRenameDividerDialog(divider) }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -257,6 +312,7 @@ class FolderActivity : AppCompatActivity() {
                             is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(item.wb.copy(folderId = targetFolder.id))
                             is FolderItem.SubFolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = targetFolder.id))
                             is FolderItem.ListItem -> viewModel.updateList(item.noteList.copy(folderId = targetFolder.id))
+                            is FolderItem.DividerItem -> { /* dividers don't move into sub-folders */ }
                         }
                     }
                     moveOut != null -> {
@@ -268,6 +324,7 @@ class FolderActivity : AppCompatActivity() {
                                 is FolderItem.WhiteboardItem -> viewModel.updateWhiteboard(moveOut.wb.copy(folderId = grandParentId))
                                 is FolderItem.SubFolderItem -> viewModel.updateFolder(moveOut.folder.copy(parentFolderId = grandParentId))
                                 is FolderItem.ListItem -> viewModel.updateList(moveOut.noteList.copy(folderId = grandParentId))
+                                is FolderItem.DividerItem -> viewModel.updateDivider(moveOut.divider.copy(folderId = grandParentId))
                             }
                         }
                     }
@@ -283,8 +340,8 @@ class FolderActivity : AppCompatActivity() {
 
         fun refresh() {
             if (!isDragging) {
-                adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
-                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() && latestSubFolders.isEmpty() && latestLists.isEmpty()
+                adapter.forceRefresh(latestNotes, latestWhiteboards, latestSubFolders, latestLists, latestDividers)
+                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() && latestSubFolders.isEmpty() && latestLists.isEmpty() && latestDividers.isEmpty()
                 binding.emptyText.visibility = if (empty) android.view.View.VISIBLE else android.view.View.GONE
             }
         }
@@ -293,6 +350,7 @@ class FolderActivity : AppCompatActivity() {
         viewModel.getWhiteboardsInFolder(folderId).observe(this) { latestWhiteboards = it; refresh() }
         viewModel.getSubFolders(folderId).observe(this) { latestSubFolders = it; refresh() }
         viewModel.getListsInFolder(folderId).observe(this) { latestLists = it; refresh() }
+        viewModel.getDividersInFolder(folderId).observe(this) { latestDividers = it; refresh() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
@@ -306,12 +364,13 @@ class FolderActivity : AppCompatActivity() {
                 latestWhiteboards = db.whiteboardDao().getWhiteboardsInFolderDirect(folderId)
                 latestSubFolders  = db.folderDao().getSubFoldersDirect(folderId)
                 latestLists       = db.noteListDao().getListsInFolderDirect(folderId)
-                // forceRefresh skips DiffUtil and calls notifyDataSetChanged so every card rebinds
-                adapter.forceRefresh(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
+                latestDividers    = db.dividerDao().getDividersInFolderDirect(folderId)
+                adapter.forceRefresh(latestNotes, latestWhiteboards, latestSubFolders, latestLists, latestDividers)
                 val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() &&
-                            latestSubFolders.isEmpty() && latestLists.isEmpty()
+                            latestSubFolders.isEmpty() && latestLists.isEmpty() && latestDividers.isEmpty()
                 binding.emptyText.visibility =
                     if (empty) android.view.View.VISIBLE else android.view.View.GONE
+                binding.recyclerView.scrollToPosition(0)
             }
         }
     }
@@ -365,6 +424,10 @@ class FolderActivity : AppCompatActivity() {
             sheet.dismiss()
             showNewSubFolderDialog()
         }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewDivider).setOnClickListener {
+            sheet.dismiss()
+            showNewDividerDialog()
+        }
         sheet.show()
     }
 
@@ -378,6 +441,78 @@ class FolderActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name, parentFolderId = folderId))
             }
             .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    private fun showIconOptionsDialog(
+        onPickImage: () -> Unit,
+        onPickColor: (String) -> Unit,
+        onResetDefault: () -> Unit,
+        onChangeLabelColor: (() -> Unit)? = null
+    ) {
+        val options = if (onChangeLabelColor != null)
+            arrayOf("Use a picture", "Use a solid color", "Reset to default", "Change label color")
+        else
+            arrayOf("Use a picture", "Use a solid color", "Reset to default")
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Change icon")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> onPickImage()
+                    1 -> ColorPickerDialog.showForIcon(this, null) { color ->
+                        onPickColor(color)
+                    }
+                    2 -> onResetDefault()
+                    3 -> onChangeLabelColor?.invoke()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showNewDividerDialog() {
+        val editText = android.widget.EditText(this).apply {
+            hint = "Label (optional)"
+            setBackgroundResource(0)
+            setPadding(48, 24, 48, 8)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("New divider")
+            .setView(editText)
+            .setPositiveButton("Create") { _, _ ->
+                val label = editText.text.toString().trim()
+                lifecycleScope.launch {
+                    viewModel.insertDivider(Divider(label = label, folderId = folderId))
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRenameDividerDialog(divider: Divider) {
+        val editText = android.widget.EditText(this).apply {
+            setText(divider.label)
+            hint = "Label (optional)"
+            setBackgroundResource(0)
+            setPadding(48, 24, 48, 8)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Edit divider label")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+                val label = editText.text.toString().trim()
+                viewModel.updateDivider(divider.copy(label = label))
+            }
+            .setNeutralButton("Delete") { _, _ ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete divider")
+                    .setMessage("Are you sure you want to delete this divider?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteDivider(divider) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {

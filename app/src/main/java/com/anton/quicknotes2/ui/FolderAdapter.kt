@@ -1,16 +1,21 @@
 package com.anton.quicknotes2.ui
 
+import android.graphics.Color
 import android.net.Uri
 import android.view.LayoutInflater
+import android.widget.ImageView
 import android.view.MotionEvent
 import android.view.ViewGroup
+import androidx.annotation.DrawableRes
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import com.anton.quicknotes2.data.Divider
 import com.anton.quicknotes2.data.Folder
 import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.Whiteboard
+import com.anton.quicknotes2.databinding.ItemDividerBinding
 import com.anton.quicknotes2.databinding.ItemFolderBinding
 import com.anton.quicknotes2.databinding.ItemListBinding
 import com.anton.quicknotes2.databinding.ItemNoteBinding
@@ -23,6 +28,7 @@ sealed class FolderItem {
     data class WhiteboardItem(val wb: Whiteboard) : FolderItem()
     data class SubFolderItem(val folder: Folder) : FolderItem()
     data class ListItem(val noteList: NoteList) : FolderItem()
+    data class DividerItem(val divider: Divider) : FolderItem()
 }
 
 class FolderAdapter(
@@ -39,7 +45,9 @@ class FolderAdapter(
     private val onSubFolderIconClick: (Folder) -> Unit = {},
     private val onListClick: (NoteList) -> Unit = {},
     private val onListDelete: (NoteList) -> Unit = {},
-    private val onListIconClick: (NoteList) -> Unit = {}
+    private val onListIconClick: (NoteList) -> Unit = {},
+    private val onDividerDelete: (Divider) -> Unit = {},
+    private val onDividerRename: (Divider) -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -49,9 +57,9 @@ class FolderAdapter(
         const val TYPE_WHITEBOARD = 3
         const val TYPE_FOLDER = 4
         const val TYPE_LIST = 5
+        const val TYPE_DIVIDER = 6
     }
 
-    // Mixed list of notes and whiteboards
     private val items = mutableListOf<FolderItem>()
     var itemTouchHelper: ItemTouchHelper? = null
 
@@ -64,8 +72,8 @@ class FolderAdapter(
             else notifyItemRemoved(cancelPos)
         }
 
-    fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder> = emptyList(), lists: List<NoteList> = emptyList()) {
-        val newItems = buildSortedItems(notes, whiteboards, subFolders, lists)
+    fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder> = emptyList(), lists: List<NoteList> = emptyList(), dividers: List<Divider> = emptyList()) {
+        val newItems = buildSortedItems(notes, whiteboards, subFolders, lists, dividers)
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = items.size
             override fun getNewListSize() = newItems.size
@@ -76,6 +84,7 @@ class FolderAdapter(
                     old is FolderItem.WhiteboardItem && new is FolderItem.WhiteboardItem -> old.wb.id == new.wb.id
                     old is FolderItem.SubFolderItem && new is FolderItem.SubFolderItem -> old.folder.id == new.folder.id
                     old is FolderItem.ListItem && new is FolderItem.ListItem -> old.noteList.id == new.noteList.id
+                    old is FolderItem.DividerItem && new is FolderItem.DividerItem -> old.divider.id == new.divider.id
                     else -> false
                 }
             }
@@ -87,24 +96,26 @@ class FolderAdapter(
     }
 
     /** Same as submitMixed but skips DiffUtil — forces every visible card to rebind. Use on resume. */
-    fun forceRefresh(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>) {
+    fun forceRefresh(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>, dividers: List<Divider> = emptyList()) {
         items.clear()
-        items.addAll(buildSortedItems(notes, whiteboards, subFolders, lists))
+        items.addAll(buildSortedItems(notes, whiteboards, subFolders, lists, dividers))
         notifyDataSetChanged()
     }
 
-    private fun buildSortedItems(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>): MutableList<FolderItem> {
+    private fun buildSortedItems(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>, dividers: List<Divider> = emptyList()): MutableList<FolderItem> {
         val newItems = mutableListOf<FolderItem>()
         notes.forEach { newItems.add(FolderItem.NoteItem(it)) }
         whiteboards.forEach { newItems.add(FolderItem.WhiteboardItem(it)) }
         subFolders.forEach { newItems.add(FolderItem.SubFolderItem(it)) }
         lists.forEach { newItems.add(FolderItem.ListItem(it)) }
+        dividers.forEach { newItems.add(FolderItem.DividerItem(it)) }
         newItems.sortBy {
             when (it) {
                 is FolderItem.NoteItem -> it.note.sortOrder
                 is FolderItem.WhiteboardItem -> it.wb.sortOrder
                 is FolderItem.SubFolderItem -> it.folder.sortOrder
                 is FolderItem.ListItem -> it.noteList.sortOrder
+                is FolderItem.DividerItem -> it.divider.sortOrder
             }
         }
         return newItems
@@ -141,6 +152,7 @@ class FolderAdapter(
             is FolderItem.WhiteboardItem -> TYPE_WHITEBOARD
             is FolderItem.SubFolderItem -> TYPE_FOLDER
             is FolderItem.ListItem -> TYPE_LIST
+            is FolderItem.DividerItem -> TYPE_DIVIDER
         }
     }
 
@@ -150,16 +162,18 @@ class FolderAdapter(
         RecyclerView.ViewHolder(binding.root) {
         fun bind(note: Note) {
             binding.textTitle.text = note.title.ifBlank { "Untitled" }
-            binding.textBody.text = note.body
+            binding.textBody.text = if (note.body.startsWith("<")) {
+                android.text.Html.fromHtml(note.body, android.text.Html.FROM_HTML_MODE_COMPACT).toString()
+            } else note.body
             binding.textTimestamp.text = SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()).format(Date(note.timestamp))
             binding.root.setOnClickListener { onNoteClick(note) }
             binding.btnDelete.setOnClickListener { onNoteDelete(note) }
             binding.itemIcon.setOnClickListener { onNoteIconClick(note) }
-            if (note.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(note.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            applyLabelColor(binding.root, binding.accentStrip, binding.textItemType, note.labelColor, Color.WHITE, Color.parseColor("#FF00897B"))
+            applyIconUri(binding.itemIcon, note.iconUri, com.anton.quicknotes2.R.drawable.ic_note_default)
+            binding.root.setOnLongClickListener { itemTouchHelper?.startDrag(this); true }
             binding.dragHandle.setOnTouchListener { _, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
-                false
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this); false
             }
         }
     }
@@ -172,11 +186,11 @@ class FolderAdapter(
             binding.root.setOnClickListener { onWhiteboardClick(wb) }
             binding.btnDelete.setOnClickListener { onWhiteboardDelete(wb) }
             binding.itemIcon.setOnClickListener { onWhiteboardIconClick(wb) }
-            if (wb.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(wb.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            applyLabelColor(binding.root, binding.accentStrip, binding.textItemType, wb.labelColor, Color.WHITE, Color.parseColor("#FF6650A4"))
+            applyIconUri(binding.itemIcon, wb.iconUri, com.anton.quicknotes2.R.drawable.ic_whiteboard_default)
+            binding.root.setOnLongClickListener { itemTouchHelper?.startDrag(this); true }
             binding.dragHandle.setOnTouchListener { _, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
-                false
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this); false
             }
         }
     }
@@ -188,11 +202,18 @@ class FolderAdapter(
             binding.root.setOnClickListener { onSubFolderClick(folder) }
             binding.btnDelete.setOnClickListener { onSubFolderDelete(folder) }
             binding.itemIcon.setOnClickListener { onSubFolderIconClick(folder) }
-            if (folder.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(folder.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_folder_default)
+            val defaultGray = Color.parseColor("#FF757575")
+            if (folder.labelColor != null) {
+                try { binding.root.setCardBackgroundColor(Color.parseColor(folder.labelColor)) } catch (_: Exception) {}
+                binding.textFolderName.setTextColor(Color.BLACK)
+            } else {
+                binding.root.setCardBackgroundColor(defaultGray)
+                binding.textFolderName.setTextColor(Color.WHITE)
+            }
+            applyIconUri(binding.itemIcon, folder.iconUri, com.anton.quicknotes2.R.drawable.ic_folder_default)
+            binding.root.setOnLongClickListener { itemTouchHelper?.startDrag(this); true }
             binding.dragHandle.setOnTouchListener { _, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
-                false
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this); false
             }
         }
     }
@@ -205,13 +226,70 @@ class FolderAdapter(
             binding.root.setOnClickListener { onListClick(list) }
             binding.btnDelete.setOnClickListener { onListDelete(list) }
             binding.itemIcon.setOnClickListener { onListIconClick(list) }
-            if (list.iconUri != null) binding.itemIcon.setImageURI(Uri.parse(list.iconUri))
-            else binding.itemIcon.setImageResource(com.anton.quicknotes2.R.drawable.ic_note_default)
+            applyLabelColor(binding.root, binding.accentStrip, binding.textItemType, list.labelColor, Color.WHITE, Color.parseColor("#FF1565C0"))
+            applyIconUri(binding.itemIcon, list.iconUri, com.anton.quicknotes2.R.drawable.ic_list_default)
+            binding.root.setOnLongClickListener { itemTouchHelper?.startDrag(this); true }
             binding.dragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this); false
+            }
+        }
+    }
+
+    inner class DividerViewHolder(private val binding: ItemDividerBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(divider: Divider) {
+            val hasLabel = divider.label.isNotBlank()
+            binding.textDividerLabel.text = divider.label
+            binding.labelRow.visibility = if (hasLabel) android.view.View.VISIBLE else android.view.View.GONE
+            binding.labelDividerLine.visibility = if (hasLabel) android.view.View.VISIBLE else android.view.View.GONE
+            binding.noLabelRow.visibility = if (hasLabel) android.view.View.GONE else android.view.View.VISIBLE
+            binding.root.setOnClickListener { onDividerRename(divider) }
+            binding.root.setOnLongClickListener { itemTouchHelper?.startDrag(this); true }
+            val dragListener = android.view.View.OnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_DOWN) itemTouchHelper?.startDrag(this)
                 false
             }
+            binding.dragHandle.setOnTouchListener(dragListener)
+            binding.dragHandleNoLabel.setOnTouchListener(dragListener)
         }
+    }
+
+    private fun applyLabelColor(
+        card: com.google.android.material.card.MaterialCardView,
+        accentStrip: android.view.View,
+        typeLabel: android.widget.TextView,
+        labelColor: String?,
+        defaultBg: Int,
+        accentColor: Int
+    ) {
+        if (labelColor != null) {
+            try { card.setCardBackgroundColor(Color.parseColor(labelColor)) } catch (_: Exception) {}
+            accentStrip.visibility = android.view.View.GONE
+            typeLabel.setTextColor(Color.BLACK)
+        } else {
+            card.setCardBackgroundColor(defaultBg)
+            accentStrip.visibility = android.view.View.VISIBLE
+            typeLabel.setTextColor(accentColor)
+        }
+    }
+
+    private fun applyIconUri(imageView: ImageView, iconUri: String?, @DrawableRes fallback: Int) {
+        if (iconUri != null) {
+            if (iconUri.startsWith("color:")) {
+                imageView.setImageDrawable(null)
+                try { imageView.setBackgroundColor(Color.parseColor(iconUri.removePrefix("color:"))) } catch (_: Exception) {}
+            } else imageView.setImageURISafe(iconUri, fallback)
+        } else {
+            imageView.setImageResource(fallback)
+            imageView.background = androidx.core.content.ContextCompat.getDrawable(imageView.context, com.anton.quicknotes2.R.drawable.icon_placeholder_bg)
+        }
+    }
+
+    private fun ImageView.setImageURISafe(uri: String, @DrawableRes fallback: Int) {
+        try {
+            setImageURI(Uri.parse(uri))
+            if (drawable == null) setImageResource(fallback)
+        } catch (_: Exception) { setImageResource(fallback) }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -226,6 +304,7 @@ class FolderAdapter(
             TYPE_WHITEBOARD -> WhiteboardViewHolder(ItemWhiteboardBinding.inflate(inflater, parent, false))
             TYPE_FOLDER -> SubFolderViewHolder(ItemFolderBinding.inflate(inflater, parent, false))
             TYPE_LIST -> ListViewHolder(ItemListBinding.inflate(inflater, parent, false))
+            TYPE_DIVIDER -> DividerViewHolder(ItemDividerBinding.inflate(inflater, parent, false))
             else -> NoteViewHolder(ItemNoteBinding.inflate(inflater, parent, false))
         }
     }
@@ -237,6 +316,7 @@ class FolderAdapter(
             is FolderItem.WhiteboardItem -> (holder as? WhiteboardViewHolder)?.bind(item.wb)
             is FolderItem.SubFolderItem -> (holder as? SubFolderViewHolder)?.bind(item.folder)
             is FolderItem.ListItem -> (holder as? ListViewHolder)?.bind(item.noteList)
+            is FolderItem.DividerItem -> (holder as? DividerViewHolder)?.bind(item.divider)
         }
     }
 }

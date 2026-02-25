@@ -15,8 +15,9 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <!-- Teal left accent strip for Notes -->
+        <!-- Teal left accent strip for Notes — hidden when a label color is set -->
         <View
+            android:id="@+id/accentStrip"
             android:layout_width="5dp"
             android:layout_height="match_parent"
             android:background="#FF00897B" />
@@ -56,6 +57,7 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/textItemType"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Note"
@@ -107,4 +109,3 @@
     </LinearLayout>
 
 </com.google.android.material.card.MaterialCardView>
-

@@ -43,6 +43,61 @@
             android:layout_height="1dp"
             android:background="@android:color/transparent" />
 
+        <!-- Formatting toolbar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp">
+
+            <Button
+                android:id="@+id/btnBold"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="4dp"
+                android:text="B"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:background="@drawable/bg_format_button"
+                android:textColor="@color/format_button_text" />
+
+            <Button
+                android:id="@+id/btnItalic"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="4dp"
+                android:text="I"
+                android:textStyle="italic"
+                android:textSize="14sp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:background="@drawable/bg_format_button"
+                android:textColor="@color/format_button_text" />
+
+            <Button
+                android:id="@+id/btnUnderline"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:text="U"
+                android:textSize="14sp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:background="@drawable/bg_format_button"
+                android:textColor="@color/format_button_text" />
+
+        </LinearLayout>
+
         <EditText
             android:id="@+id/editBody"
             android:layout_width="match_parent"

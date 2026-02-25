@@ -19,12 +19,14 @@ import com.anton.quicknotes2.data.Note
 import com.anton.quicknotes2.data.NoteDatabase
 import com.anton.quicknotes2.data.NoteList
 import com.anton.quicknotes2.data.NoteRepository
+import com.anton.quicknotes2.data.Divider
 import com.anton.quicknotes2.databinding.ActivityMainBinding
 import com.anton.quicknotes2.databinding.DialogNewFolderBinding
 import com.anton.quicknotes2.ui.HomeAdapter
 import com.anton.quicknotes2.ui.HomeItem
 import com.anton.quicknotes2.ui.NoteViewModel
 import com.anton.quicknotes2.ui.NoteViewModelFactory
+import com.anton.quicknotes2.ui.ColorPickerDialog
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -36,10 +38,11 @@ class MainActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao()))
     }
 
     private var isDragging = false
+    private var returningFromIconPicker = false
     private var pendingIconNoteId: Int? = null
     private var pendingIconFolderId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
@@ -118,12 +121,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        returningFromIconPicker = false
         if (uri == null) return@registerForActivityResult
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconFolderId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
         pendingIconListId?.let { viewModel.updateListIcon(it, uri.toString()); pendingIconListId = null }
+        // Refresh from DB after write so the new icon shows immediately
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(150) // let Room finish the write
+            val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
+            val items = buildHomeList(
+                db.folderDao().getAllFoldersDirect(),
+                db.noteDao().getAllNotesDirect(),
+                db.whiteboardDao().getAllWhiteboardsDirect(),
+                db.noteListDao().getAllListsDirect(),
+                db.dividerDao().getAllDividersDirect()
+            )
+            adapter.forceRefresh(items)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -175,10 +192,28 @@ class MainActivity : AppCompatActivity() {
             },
             onOrderChanged = { items -> viewModel.reorderHomeItems(items) },
             onNoteIconClick = { note ->
-                pendingIconNoteId = note.id; pendingIconFolderId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
+                showIconOptionsDialog(
+                    onPickImage = { returningFromIconPicker = true; pendingIconNoteId = note.id; pendingIconFolderId = null; pendingIconWhiteboardId = null; pendingIconListId = null; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateNoteIcon(note.id, "color:$color") },
+                    onResetDefault = { viewModel.updateNoteIcon(note.id, null) },
+                    onChangeLabelColor = {
+                        com.anton.quicknotes2.ui.ColorPickerDialog.show(this, note.labelColor) { color ->
+                            viewModel.updateNoteLabelColor(note.id, color)
+                        }
+                    }
+                )
             },
             onFolderIconClick = { folder ->
-                pendingIconFolderId = folder.id; pendingIconNoteId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
+                showIconOptionsDialog(
+                    onPickImage = { returningFromIconPicker = true; pendingIconFolderId = folder.id; pendingIconNoteId = null; pendingIconWhiteboardId = null; pendingIconListId = null; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateFolderIcon(folder.id, "color:$color") },
+                    onResetDefault = { viewModel.updateFolderIcon(folder.id, null) },
+                    onChangeLabelColor = {
+                        com.anton.quicknotes2.ui.ColorPickerDialog.show(this, folder.labelColor) { color ->
+                            viewModel.updateFolderLabelColor(folder.id, color)
+                        }
+                    }
+                )
             },
             onWhiteboardClick = { wb ->
                 startActivity(Intent(this, WhiteboardEditorActivity::class.java).apply {
@@ -193,7 +228,16 @@ class MainActivity : AppCompatActivity() {
                     .setNegativeButton("Cancel", null).show()
             },
             onWhiteboardIconClick = { wb ->
-                pendingIconWhiteboardId = wb.id; pendingIconNoteId = null; pendingIconFolderId = null; pickIcon.launch("image/*")
+                showIconOptionsDialog(
+                    onPickImage = { returningFromIconPicker = true; pendingIconWhiteboardId = wb.id; pendingIconNoteId = null; pendingIconFolderId = null; pendingIconListId = null; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateWhiteboardIcon(wb.id, "color:$color") },
+                    onResetDefault = { viewModel.updateWhiteboardIcon(wb.id, null) },
+                    onChangeLabelColor = {
+                        com.anton.quicknotes2.ui.ColorPickerDialog.show(this, wb.labelColor) { color ->
+                            viewModel.updateWhiteboardLabelColor(wb.id, color)
+                        }
+                    }
+                )
             },
             onListClick = { list ->
                 startActivity(Intent(this, ListEditorActivity::class.java).apply {
@@ -208,8 +252,25 @@ class MainActivity : AppCompatActivity() {
                     .setNegativeButton("Cancel", null).show()
             },
             onListIconClick = { list ->
-                pendingIconListId = list.id; pendingIconNoteId = null; pendingIconFolderId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*")
-            }
+                showIconOptionsDialog(
+                    onPickImage = { returningFromIconPicker = true; pendingIconListId = list.id; pendingIconNoteId = null; pendingIconFolderId = null; pendingIconWhiteboardId = null; pickIcon.launch("image/*") },
+                    onPickColor = { color -> viewModel.updateListIcon(list.id, "color:$color") },
+                    onResetDefault = { viewModel.updateListIcon(list.id, null) },
+                    onChangeLabelColor = {
+                        com.anton.quicknotes2.ui.ColorPickerDialog.show(this, list.labelColor) { color ->
+                            viewModel.updateListLabelColor(list.id, color)
+                        }
+                    }
+                )
+            },
+            onDividerDelete = { divider ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete divider")
+                    .setMessage("Are you sure you want to delete this divider?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteDivider(divider) }
+                    .setNegativeButton("Cancel", null).show()
+            },
+            onDividerRename = { divider -> showRenameDividerDialog(divider) }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -286,6 +347,7 @@ class MainActivity : AppCompatActivity() {
                         is HomeItem.WhiteboardItem -> viewModel.updateWhiteboard(item.whiteboard.copy(folderId = folder.id))
                         is HomeItem.FolderItem -> viewModel.updateFolder(item.folder.copy(parentFolderId = folder.id))
                         is HomeItem.ListItem -> viewModel.updateList(item.noteList.copy(folderId = folder.id))
+                        is HomeItem.DividerItem -> { /* dividers cannot move into folders this way */ }
                     }
                 } else {
                     viewModel.reorderHomeItems(adapter.getItems())
@@ -299,12 +361,16 @@ class MainActivity : AppCompatActivity() {
         viewModel.allNotes.observe(this) { _ -> if (!isDragging) refreshHomeList() }
         viewModel.allWhiteboards.observe(this) { _ -> if (!isDragging) refreshHomeList() }
         viewModel.allLists.observe(this) { _ -> if (!isDragging) refreshHomeList() }
+        viewModel.allDividers.observe(this) { _ -> if (!isDragging) refreshHomeList() }
 
         binding.fab.setOnClickListener { showFabMenu() }
     }
 
     override fun onResume() {
         super.onResume()
+        // Skip the DB read if we're returning from the icon picker —
+        // the pickIcon callback handles the refresh itself after the write.
+        if (returningFromIconPicker) return
         if (!isDragging) {
             lifecycleScope.launch {
                 val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
@@ -312,7 +378,8 @@ class MainActivity : AppCompatActivity() {
                 val folders     = db.folderDao().getAllFoldersDirect()
                 val whiteboards = db.whiteboardDao().getAllWhiteboardsDirect()
                 val lists       = db.noteListDao().getAllListsDirect()
-                val items = buildHomeList(folders, notes, whiteboards, lists)
+                val dividers    = db.dividerDao().getAllDividersDirect()
+                val items = buildHomeList(folders, notes, whiteboards, lists, dividers)
                 adapter.forceRefresh(items)
                 binding.emptyText.visibility =
                     if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
@@ -325,8 +392,9 @@ class MainActivity : AppCompatActivity() {
         val notes = viewModel.allNotes.value ?: emptyList()
         val whiteboards = viewModel.allWhiteboards.value ?: emptyList()
         val lists = viewModel.allLists.value ?: emptyList()
-        val items = buildHomeList(folders, notes, whiteboards, lists)
-        adapter.submitList(items)
+        val dividers = viewModel.allDividers.value ?: emptyList()
+        val items = buildHomeList(folders, notes, whiteboards, lists, dividers)
+        adapter.forceRefresh(items)
         binding.emptyText.visibility = if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
     }
 
@@ -334,19 +402,22 @@ class MainActivity : AppCompatActivity() {
         folders: List<com.anton.quicknotes2.data.Folder>,
         notes: List<com.anton.quicknotes2.data.Note>,
         whiteboards: List<com.anton.quicknotes2.data.Whiteboard>,
-        lists: List<com.anton.quicknotes2.data.NoteList> = emptyList()
+        lists: List<com.anton.quicknotes2.data.NoteList> = emptyList(),
+        dividers: List<com.anton.quicknotes2.data.Divider> = emptyList()
     ): List<HomeItem> {
         val combined = mutableListOf<HomeItem>()
         folders.forEach { combined.add(HomeItem.FolderItem(it)) }
         notes.forEach { combined.add(HomeItem.NoteItem(it)) }
         whiteboards.forEach { combined.add(HomeItem.WhiteboardItem(it)) }
         lists.forEach { combined.add(HomeItem.ListItem(it)) }
+        dividers.forEach { combined.add(HomeItem.DividerItem(it)) }
         combined.sortBy {
             when (it) {
                 is HomeItem.NoteItem -> it.note.sortOrder
                 is HomeItem.FolderItem -> it.folder.sortOrder
                 is HomeItem.WhiteboardItem -> it.whiteboard.sortOrder
                 is HomeItem.ListItem -> it.noteList.sortOrder
+                is HomeItem.DividerItem -> it.divider.sortOrder
             }
         }
         return combined
@@ -370,6 +441,9 @@ class MainActivity : AppCompatActivity() {
         sheetView.findViewById<android.widget.TextView>(R.id.btnNewFolder).setOnClickListener {
             sheet.dismiss(); showNewFolderDialog()
         }
+        sheetView.findViewById<android.widget.TextView>(R.id.btnNewDivider).setOnClickListener {
+            sheet.dismiss(); showNewDividerDialog(null)
+        }
         sheet.show()
     }
 
@@ -383,6 +457,78 @@ class MainActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name))
             }
             .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    private fun showIconOptionsDialog(
+        onPickImage: () -> Unit,
+        onPickColor: (String) -> Unit,
+        onResetDefault: () -> Unit,
+        onChangeLabelColor: (() -> Unit)? = null
+    ) {
+        val options = if (onChangeLabelColor != null)
+            arrayOf("Use a picture", "Use a solid color", "Reset to default", "Change label color")
+        else
+            arrayOf("Use a picture", "Use a solid color", "Reset to default")
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Change icon")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> onPickImage()
+                    1 -> com.anton.quicknotes2.ui.ColorPickerDialog.showForIcon(this, null) { color ->
+                        onPickColor(color)
+                    }
+                    2 -> onResetDefault()
+                    3 -> onChangeLabelColor?.invoke()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showNewDividerDialog(folderId: Int?) {
+        val editText = android.widget.EditText(this).apply {
+            hint = "Label (optional)"
+            setBackgroundResource(0)
+            setPadding(48, 24, 48, 8)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("New divider")
+            .setView(editText)
+            .setPositiveButton("Create") { _, _ ->
+                val label = editText.text.toString().trim()
+                lifecycleScope.launch {
+                    viewModel.insertDivider(com.anton.quicknotes2.data.Divider(label = label, folderId = folderId))
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRenameDividerDialog(divider: Divider) {
+        val editText = android.widget.EditText(this).apply {
+            setText(divider.label)
+            hint = "Label (optional)"
+            setBackgroundResource(0)
+            setPadding(48, 24, 48, 8)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Edit divider label")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+                val label = editText.text.toString().trim()
+                viewModel.updateDivider(divider.copy(label = label))
+            }
+            .setNeutralButton("Delete") { _, _ ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Delete divider")
+                    .setMessage("Are you sure you want to delete this divider?")
+                    .setPositiveButton("Delete") { _, _ -> viewModel.deleteDivider(divider) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -424,7 +570,8 @@ class MainActivity : AppCompatActivity() {
             val hasData = db.noteDao().getAllNotesAllLevelsDirect().isNotEmpty() ||
                           db.folderDao().getAllFoldersAllLevelsDirect().isNotEmpty() ||
                           db.whiteboardDao().getAllWhiteboardsAllLevelsDirect().isNotEmpty() ||
-                          db.noteListDao().getAllListsAllLevelsDirect().isNotEmpty()
+                          db.noteListDao().getAllListsAllLevelsDirect().isNotEmpty() ||
+                          db.dividerDao().getAllDividersAllLevelsDirect().isNotEmpty()
 
             if (!hasData) {
                 MaterialAlertDialogBuilder(this@MainActivity)

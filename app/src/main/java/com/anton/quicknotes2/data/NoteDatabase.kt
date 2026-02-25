@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Note::class, Folder::class, NoteImage::class, Whiteboard::class, NoteList::class, NoteListItem::class], version = 8, exportSchema = false)
+@Database(entities = [Note::class, Folder::class, NoteImage::class, Whiteboard::class, NoteList::class, NoteListItem::class, Divider::class], version = 10, exportSchema = false)
 abstract class NoteDatabase : RoomDatabase() {
 
     abstract fun noteDao(): NoteDao
@@ -15,6 +15,7 @@ abstract class NoteDatabase : RoomDatabase() {
     abstract fun noteImageDao(): NoteImageDao
     abstract fun whiteboardDao(): WhiteboardDao
     abstract fun noteListDao(): NoteListDao
+    abstract fun dividerDao(): DividerDao
 
     companion object {
         @Volatile
@@ -111,6 +112,29 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `notes` ADD COLUMN `labelColor` TEXT DEFAULT NULL")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `dividers` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`label` TEXT NOT NULL DEFAULT '', " +
+                    "`folderId` INTEGER DEFAULT NULL, " +
+                    "`sortOrder` INTEGER NOT NULL DEFAULT 0, " +
+                    "FOREIGN KEY(`folderId`) REFERENCES `folders`(`id`) ON DELETE SET NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_dividers_folderId` ON `dividers` (`folderId`)")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `whiteboards` ADD COLUMN `labelColor` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `note_lists` ADD COLUMN `labelColor` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `folders` ADD COLUMN `labelColor` TEXT DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): NoteDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -118,7 +142,8 @@ abstract class NoteDatabase : RoomDatabase() {
                     NoteDatabase::class.java,
                     "note_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

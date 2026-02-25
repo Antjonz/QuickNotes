@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "note_lists",
+    tableName = "dividers",
     foreignKeys = [ForeignKey(
         entity = Folder::class,
         parentColumns = ["id"],
@@ -15,14 +15,11 @@ import androidx.room.PrimaryKey
     )],
     indices = [Index("folderId")]
 )
-data class NoteList(
+data class Divider(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val title: String = "",
-    val timestamp: Long = System.currentTimeMillis(),
+    val label: String = "",
     val folderId: Int? = null,
-    val sortOrder: Int = 0,
-    val iconUri: String? = null,
-    val labelColor: String? = null
+    val sortOrder: Int = 0
 )
 

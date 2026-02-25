@@ -34,7 +34,7 @@ class WhiteboardEditorActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao()))
     }
 
     private var whiteboardId: Int = -1

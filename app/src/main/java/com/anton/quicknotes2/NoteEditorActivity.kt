@@ -2,13 +2,23 @@ package com.anton.quicknotes2
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Html
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.Editable
+import android.text.TextWatcher
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.ImageButton
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -36,7 +46,7 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
-        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
+        NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao()))
     }
 
     private var existingNote: Note? = null
@@ -45,6 +55,12 @@ class NoteEditorActivity : AppCompatActivity() {
     private var isDraggingImages = false
     private var originalTitle: String = ""
     private var originalBody: String = ""
+
+    // Persistent formatting toggle state
+    private var isBoldActive = false
+    private var isItalicActive = false
+    private var isUnderlineActive = false
+    private var isApplyingFormat = false  // guard to prevent TextWatcher re-entrance
 
     // Photo picker launcher
     private val pickImages = registerForActivityResult(
@@ -101,12 +117,73 @@ class NoteEditorActivity : AppCompatActivity() {
                 note?.let {
                     existingNote = it
                     binding.editTitle.setText(it.title)
-                    binding.editBody.setText(it.body)
+                    // Load body: if HTML, parse spans; otherwise plain text
+                    if (it.body.contains("<") && it.body.contains(">")) {
+                        binding.editBody.setText(Html.fromHtml(it.body, Html.FROM_HTML_MODE_COMPACT))
+                    } else {
+                        binding.editBody.setText(it.body)
+                    }
                     originalTitle = it.title
-                    originalBody = it.body
+                    // Normalize originalBody the same way hasUnsavedChanges() does,
+                    // so plain-text bodies imported from old backups don't trigger a
+                    // false "unsaved changes" warning before the user types anything.
+                    originalBody = Html.toHtml(
+                        binding.editBody.text,
+                        Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE
+                    ).trim()
                 }
             }
         }
+
+        // ── Formatting buttons ─────────────────────────────
+        updateFormatButtonStates() // set initial outlined appearance
+        binding.btnBold.setOnClickListener {
+            if (hasSelection()) {
+                toggleSpanOnSelection(StyleSpan(Typeface.BOLD), Typeface.BOLD)
+                // Reflect selection state in the toggle
+                isBoldActive = selectionHasSpan(StyleSpan::class.java) { it.style == Typeface.BOLD }
+            } else {
+                isBoldActive = !isBoldActive
+            }
+            updateFormatButtonStates()
+        }
+        binding.btnItalic.setOnClickListener {
+            if (hasSelection()) {
+                toggleSpanOnSelection(StyleSpan(Typeface.ITALIC), Typeface.ITALIC)
+                isItalicActive = selectionHasSpan(StyleSpan::class.java) { it.style == Typeface.ITALIC }
+            } else {
+                isItalicActive = !isItalicActive
+            }
+            updateFormatButtonStates()
+        }
+        binding.btnUnderline.setOnClickListener {
+            if (hasSelection()) {
+                toggleSpanOnSelection(UnderlineSpan(), -1)
+                isUnderlineActive = selectionHasSpan(UnderlineSpan::class.java) { true }
+            } else {
+                isUnderlineActive = !isUnderlineActive
+            }
+            updateFormatButtonStates()
+        }
+
+        // TextWatcher: apply active formats to each character as it's typed
+        binding.editBody.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (isApplyingFormat || count == 0) return
+                if (!isBoldActive && !isItalicActive && !isUnderlineActive) return
+                isApplyingFormat = true
+                val text = binding.editBody.text as? Spannable ?: run { isApplyingFormat = false; return }
+                if (isBoldActive)
+                    text.setSpan(StyleSpan(Typeface.BOLD), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if (isItalicActive)
+                    text.setSpan(StyleSpan(Typeface.ITALIC), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if (isUnderlineActive)
+                    text.setSpan(UnderlineSpan(), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                isApplyingFormat = false
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         // ── Image thumbnail strip ──────────────────────────
         imageAdapter = NoteImageAdapter(
@@ -151,7 +228,7 @@ class NoteEditorActivity : AppCompatActivity() {
             imageAdapter.isDeleteMode = !imageAdapter.isDeleteMode
             val tint = if (imageAdapter.isDeleteMode)
                 android.content.res.ColorStateList.valueOf(
-                    androidx.core.content.ContextCompat.getColor(this, com.anton.quicknotes2.R.color.delete_red)
+                    ContextCompat.getColor(this, R.color.delete_red)
                 )
             else null
             androidx.core.widget.ImageViewCompat.setImageTintList(binding.btnToggleDeleteImages, tint)
@@ -168,6 +245,49 @@ class NoteEditorActivity : AppCompatActivity() {
                 onBackPressedDispatcher.onBackPressed()
             }
         }
+    }
+
+    private fun hasSelection(): Boolean {
+        val start = binding.editBody.selectionStart
+        val end = binding.editBody.selectionEnd
+        return start >= 0 && end > start
+    }
+
+    private fun <T : Any> selectionHasSpan(cls: Class<T>, predicate: (T) -> Boolean): Boolean {
+        val text = binding.editBody.text as? Spannable ?: return false
+        val start = binding.editBody.selectionStart.coerceAtLeast(0)
+        val end = binding.editBody.selectionEnd.coerceAtLeast(0)
+        return text.getSpans(start, end, cls).any { predicate(it) && text.getSpanStart(it) <= start && text.getSpanEnd(it) >= end }
+    }
+
+    private fun toggleSpanOnSelection(span: Any, styleType: Int) {
+        val text = binding.editBody.text as? Spannable ?: return
+        val start = binding.editBody.selectionStart.coerceAtLeast(0)
+        val end = binding.editBody.selectionEnd.coerceAtLeast(0)
+        if (start >= end) return
+        val existingSpans = when (span) {
+            is StyleSpan -> text.getSpans(start, end, StyleSpan::class.java).filter { it.style == styleType }
+            is UnderlineSpan -> text.getSpans(start, end, UnderlineSpan::class.java).toList()
+            else -> emptyList<Any>()
+        }
+        val fullySpanned = existingSpans.isNotEmpty() && existingSpans.any { s ->
+            text.getSpanStart(s) <= start && text.getSpanEnd(s) >= end
+        }
+        if (fullySpanned) {
+            existingSpans.forEach { text.removeSpan(it) }
+        } else {
+            val newSpan = when (span) {
+                is StyleSpan -> StyleSpan(span.style)
+                else -> UnderlineSpan()
+            }
+            text.setSpan(newSpan, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private fun updateFormatButtonStates() {
+        binding.btnBold.isSelected = isBoldActive
+        binding.btnItalic.isSelected = isItalicActive
+        binding.btnUnderline.isSelected = isUnderlineActive
     }
 
     private fun observeImages(noteId: Int) {
@@ -205,11 +325,13 @@ class NoteEditorActivity : AppCompatActivity() {
             R.id.action_save -> {
                 lifecycleScope.launch {
                     val title = binding.editTitle.text.toString().trim()
-                    val body = binding.editBody.text.toString().trim()
+                    // Serialize rich text to HTML
+                    val spanned = binding.editBody.text
+                    val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
                     val now = System.currentTimeMillis()
                     val current = existingNote
                     if (current == null) {
-                        ensureNoteSaved()
+                        ensureNoteSavedWithBody(title, body, now)
                     } else {
                         viewModel.update(current.copy(title = title, body = body, timestamp = now))
                     }
@@ -225,7 +347,8 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private fun hasUnsavedChanges(): Boolean {
         val title = binding.editTitle.text.toString().trim()
-        val body = binding.editBody.text.toString().trim()
+        val spanned = binding.editBody.text
+        val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
         return title != originalTitle || body != originalBody
     }
 
@@ -238,28 +361,30 @@ class NoteEditorActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun saveNote() {
-        val title = binding.editTitle.text.toString().trim()
-        val body = binding.editBody.text.toString().trim()
-        val now = System.currentTimeMillis()
-        val current = existingNote
-        if (current == null) {
-            lifecycleScope.launch {
-                ensureNoteSaved()
-            }
-        } else {
-            viewModel.update(current.copy(title = title, body = body, timestamp = now))
-        }
-    }
-
     /** Creates the note in the DB if it hasn't been saved yet, giving us a valid currentNoteId. */
     private suspend fun ensureNoteSaved() {
         if (currentNoteId != -1) return
         val title = binding.editTitle.text.toString().trim()
-        val body = binding.editBody.text.toString().trim()
+        val spanned = binding.editBody.text
+        val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
         val now = System.currentTimeMillis()
         val db = NoteDatabase.getDatabase(applicationContext)
-        val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao())
+        val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao())
+        val newId = repo.insertNoteWithOrder(
+            Note(title = title, body = body, timestamp = now, folderId = targetFolderId)
+        ).toInt()
+        currentNoteId = newId
+        existingNote = Note(id = newId, title = title, body = body, timestamp = now, folderId = targetFolderId)
+        originalBody = body
+    }
+
+    private suspend fun ensureNoteSavedWithBody(title: String, body: String, now: Long) {
+        if (currentNoteId != -1) {
+            existingNote?.let { viewModel.update(it.copy(title = title, body = body, timestamp = now)) }
+            return
+        }
+        val db = NoteDatabase.getDatabase(applicationContext)
+        val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao())
         val newId = repo.insertNoteWithOrder(
             Note(title = title, body = body, timestamp = now, folderId = targetFolderId)
         ).toInt()

@@ -8,7 +8,8 @@ class NoteRepository(
     private val folderDao: FolderDao,
     private val noteImageDao: NoteImageDao,
     private val whiteboardDao: WhiteboardDao? = null,
-    private val noteListDao: NoteListDao? = null
+    private val noteListDao: NoteListDao? = null,
+    private val dividerDao: DividerDao? = null
 ) {
 
     // ── Notes ──────────────────────────────────────────────
@@ -23,6 +24,11 @@ class NoteRepository(
         noteDao.update(note.copy(iconUri = uri))
     }
 
+    suspend fun updateNoteLabelColor(noteId: Int, color: String?) {
+        val note = noteDao.getNoteById(noteId) ?: return
+        noteDao.update(note.copy(labelColor = color))
+    }
+
     fun getNotesInFolder(folderId: Int): LiveData<List<Note>> =
         folderDao.getNotesInFolder(folderId)
 
@@ -33,7 +39,7 @@ class NoteRepository(
         }
     }
 
-    /** Save sort order for any mix of notes, whiteboards, lists, and folders inside a folder. */
+    /** Save sort order for any mix of notes, whiteboards, lists, folders, and dividers inside a folder. */
     suspend fun reorderFolderContents(items: List<com.anton.quicknotes2.ui.FolderItem>) {
         items.forEachIndexed { index, item ->
             when (item) {
@@ -45,6 +51,8 @@ class NoteRepository(
                     folderDao.update(item.folder.copy(sortOrder = index))
                 is com.anton.quicknotes2.ui.FolderItem.ListItem ->
                     noteListDao?.update(item.noteList.copy(sortOrder = index))
+                is com.anton.quicknotes2.ui.FolderItem.DividerItem ->
+                    dividerDao?.update(item.divider.copy(sortOrder = index))
             }
         }
     }
@@ -61,14 +69,16 @@ class NoteRepository(
                 folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getAllDividersDirect()?.maxOfOrNull { it.sortOrder } ?: -1
             )
         } else {
             maxOf(
                 folderDao.getSubFoldersDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
                 noteDao.getNotesInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getWhiteboardsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao?.getListsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao?.getListsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getDividersInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1
             )
         }
         return folderDao.insertAndGetId(folder.copy(sortOrder = maxOrder + 1))
@@ -91,20 +101,21 @@ class NoteRepository(
         return result
     }
 
-    /** Delete folder and ALL descendants + their notes + whiteboards + lists. */
+    /** Delete folder and ALL descendants + their notes + whiteboards + lists + dividers. */
     suspend fun deleteFolderAndNotes(folder: Folder) {
         val ids = collectDescendantIds(folder.id)
         for (id in ids) {
             noteDao.getNotesInFolderDirect(id).forEach { noteDao.delete(it) }
             whiteboardDao?.getWhiteboardsInFolderDirect(id)?.forEach { whiteboardDao.delete(it) }
             noteListDao?.getListsInFolderDirect(id)?.forEach { noteListDao.delete(it) }
+            dividerDao?.getDividersInFolderDirect(id)?.forEach { dividerDao.delete(it) }
         }
         for (id in ids.reversed()) {
             folderDao.getFolderById(id)?.let { folderDao.delete(it) }
         }
     }
 
-    /** Delete folder but move its direct notes + whiteboards + lists + subfolders to parent. */
+    /** Delete folder but move its direct notes + whiteboards + lists + subfolders + dividers to parent. */
     suspend fun deleteFolderMoveNotesOut(folder: Folder) {
         val newParent = folder.parentFolderId
         val maxOrder = if (newParent == null) {
@@ -112,14 +123,16 @@ class NoteRepository(
                 noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getAllDividersDirect()?.maxOfOrNull { it.sortOrder } ?: -1
             )
         } else {
             maxOf(
                 noteDao.getNotesInFolderDirect(newParent).maxOfOrNull { it.sortOrder } ?: -1,
                 folderDao.getSubFoldersDirect(newParent).maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getWhiteboardsInFolderDirect(newParent)?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao?.getListsInFolderDirect(newParent)?.maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao?.getListsInFolderDirect(newParent)?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getDividersInFolderDirect(newParent)?.maxOfOrNull { it.sortOrder } ?: -1
             )
         }
         var offset = 0
@@ -135,15 +148,19 @@ class NoteRepository(
         folderDao.getSubFoldersDirect(folder.id).forEach { sub ->
             folderDao.update(sub.copy(parentFolderId = newParent, sortOrder = maxOrder + 1 + offset++))
         }
+        dividerDao?.getDividersInFolderDirect(folder.id)?.forEach { d ->
+            dividerDao.update(d.copy(folderId = newParent, sortOrder = maxOrder + 1 + offset++))
+        }
         folderDao.delete(folder)
     }
 
-    /** Count of direct notes + whiteboards + lists + subfolders inside a folder. */
+    /** Count of direct notes + whiteboards + lists + subfolders + dividers inside a folder. */
     suspend fun getFolderItemCount(folderId: Int): Int =
         noteDao.getNotesInFolderDirect(folderId).size +
         (whiteboardDao?.getWhiteboardsInFolderDirect(folderId)?.size ?: 0) +
         (noteListDao?.getListsInFolderDirect(folderId)?.size ?: 0) +
-        folderDao.getSubFoldersDirect(folderId).size
+        folderDao.getSubFoldersDirect(folderId).size +
+        (dividerDao?.getDividersInFolderDirect(folderId)?.size ?: 0)
 
     suspend fun getNotesInFolderCount(folderId: Int): Int =
         noteDao.getNotesInFolderDirect(folderId).size
@@ -152,20 +169,27 @@ class NoteRepository(
         folderDao.update(folder.copy(iconUri = uri))
     }
 
+    suspend fun updateFolderLabelColor(folderId: Int, color: String?) {
+        val folder = folderDao.getFolderById(folderId) ?: return
+        folderDao.update(folder.copy(labelColor = color))
+    }
+
     suspend fun insertNoteWithOrder(note: Note): Long {
         val maxOrder = if (note.folderId == null) {
             maxOf(
                 noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getAllDividersDirect()?.maxOfOrNull { it.sortOrder } ?: -1
             )
         } else {
             maxOf(
                 noteDao.getNotesInFolderDirect(note.folderId).maxOfOrNull { it.sortOrder } ?: -1,
                 noteListDao?.getListsInFolderDirect(note.folderId)?.maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getWhiteboardsInFolderDirect(note.folderId)?.maxOfOrNull { it.sortOrder } ?: -1,
-                folderDao.getSubFoldersDirect(note.folderId).maxOfOrNull { it.sortOrder } ?: -1
+                folderDao.getSubFoldersDirect(note.folderId).maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getDividersInFolderDirect(note.folderId)?.maxOfOrNull { it.sortOrder } ?: -1
             )
         }
         return noteDao.insertAndGetId(note.copy(sortOrder = maxOrder + 1))
@@ -225,6 +249,11 @@ class NoteRepository(
         whiteboardDao.update(wb.copy(iconUri = uri))
     }
 
+    suspend fun updateWhiteboardLabelColor(id: Int, color: String?) {
+        val wb = whiteboardDao!!.getWhiteboardById(id) ?: return
+        whiteboardDao.update(wb.copy(labelColor = color))
+    }
+
     suspend fun reorderHomeItemsWithWhiteboards(items: List<HomeItem>) {
         items.forEachIndexed { index, item ->
             when (item) {
@@ -232,6 +261,7 @@ class NoteRepository(
                 is HomeItem.FolderItem -> folderDao.update(item.folder.copy(sortOrder = index))
                 is HomeItem.WhiteboardItem -> whiteboardDao!!.update(item.whiteboard.copy(sortOrder = index))
                 is HomeItem.ListItem -> noteListDao!!.update(item.noteList.copy(sortOrder = index))
+                is HomeItem.DividerItem -> dividerDao!!.update(item.divider.copy(sortOrder = index))
             }
         }
     }
@@ -258,14 +288,16 @@ class NoteRepository(
                 noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao!!.getAllListsDirect().maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao!!.getAllListsDirect().maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getAllDividersDirect()?.maxOfOrNull { it.sortOrder } ?: -1
             )
         } else {
             maxOf(
                 noteDao.getNotesInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
                 folderDao.getSubFoldersDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
                 whiteboardDao?.getWhiteboardsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1,
-                noteListDao!!.getListsInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1
+                noteListDao!!.getListsInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao?.getDividersInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1
             )
         }
         return noteListDao.insertAndGetId(list.copy(sortOrder = maxOrder + 1))
@@ -278,11 +310,47 @@ class NoteRepository(
         noteListDao.update(l.copy(iconUri = uri))
     }
 
+    suspend fun updateListLabelColor(id: Int, color: String?) {
+        val l = noteListDao!!.getListById(id) ?: return
+        noteListDao.update(l.copy(labelColor = color))
+    }
+
     // ── NoteListItems ──────────────────────────────────────
     fun getItemsForList(listId: Int) = noteListDao!!.getItemsForList(listId)
     suspend fun getItemsForListDirect(listId: Int) = noteListDao!!.getItemsForListDirect(listId)
     suspend fun insertListItem(item: NoteListItem) = noteListDao!!.insertItem(item)
     suspend fun updateListItem(item: NoteListItem) = noteListDao!!.updateItem(item)
     suspend fun deleteListItem(item: NoteListItem) = noteListDao!!.deleteItem(item)
+
+    // ── Dividers ───────────────────────────────────────────
+    val allDividers: LiveData<List<Divider>> get() = dividerDao!!.getAllDividers()
+
+    fun getDividersInFolder(folderId: Int) = dividerDao!!.getDividersInFolder(folderId)
+    suspend fun getDividerById(id: Int) = dividerDao!!.getDividerById(id)
+
+    suspend fun insertDivider(divider: Divider): Long {
+        val parentId = divider.folderId
+        val maxOrder = if (parentId == null) {
+            maxOf(
+                noteDao.getAllNotesDirect().maxOfOrNull { it.sortOrder } ?: -1,
+                folderDao.getAllFoldersDirect().maxOfOrNull { it.sortOrder } ?: -1,
+                whiteboardDao?.getAllWhiteboardsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
+                noteListDao?.getAllListsDirect()?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao!!.getAllDividersDirect().maxOfOrNull { it.sortOrder } ?: -1
+            )
+        } else {
+            maxOf(
+                noteDao.getNotesInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
+                folderDao.getSubFoldersDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1,
+                whiteboardDao?.getWhiteboardsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1,
+                noteListDao?.getListsInFolderDirect(parentId)?.maxOfOrNull { it.sortOrder } ?: -1,
+                dividerDao!!.getDividersInFolderDirect(parentId).maxOfOrNull { it.sortOrder } ?: -1
+            )
+        }
+        return dividerDao!!.insertAndGetId(divider.copy(sortOrder = maxOrder + 1))
+    }
+
+    suspend fun updateDivider(divider: Divider) = dividerDao!!.update(divider)
+    suspend fun deleteDivider(divider: Divider) = dividerDao!!.delete(divider)
 }
 
