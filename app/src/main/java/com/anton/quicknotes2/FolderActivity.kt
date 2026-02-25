@@ -299,9 +299,20 @@ class FolderActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Force rebind on return from note/whiteboard/list editor so title/icon changes appear immediately
         if (!isDragging) {
-            adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
+            lifecycleScope.launch {
+                val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
+                latestNotes       = db.noteDao().getNotesInFolderDirect(folderId)
+                latestWhiteboards = db.whiteboardDao().getWhiteboardsInFolderDirect(folderId)
+                latestSubFolders  = db.folderDao().getSubFoldersDirect(folderId)
+                latestLists       = db.noteListDao().getListsInFolderDirect(folderId)
+                // forceRefresh skips DiffUtil and calls notifyDataSetChanged so every card rebinds
+                adapter.forceRefresh(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
+                val empty = latestNotes.isEmpty() && latestWhiteboards.isEmpty() &&
+                            latestSubFolders.isEmpty() && latestLists.isEmpty()
+                binding.emptyText.visibility =
+                    if (empty) android.view.View.VISIBLE else android.view.View.GONE
+            }
         }
     }
 

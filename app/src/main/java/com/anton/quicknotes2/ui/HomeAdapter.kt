@@ -75,6 +75,13 @@ class HomeAdapter(
         diff.dispatchUpdatesTo(this)
     }
 
+    /** Skips DiffUtil — forces every visible card to rebind. Use on resume. */
+    fun forceRefresh(newItems: List<HomeItem>) {
+        items.clear()
+        items.addAll(newItems)
+        notifyDataSetChanged()
+    }
+
     fun getItems(): List<HomeItem> = items.toList()
 
     fun moveItem(from: Int, to: Int) {

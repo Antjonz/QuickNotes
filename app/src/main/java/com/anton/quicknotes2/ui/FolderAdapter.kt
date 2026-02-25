@@ -65,19 +65,7 @@ class FolderAdapter(
         }
 
     fun submitMixed(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder> = emptyList(), lists: List<NoteList> = emptyList()) {
-        val newItems = mutableListOf<FolderItem>()
-        notes.forEach { newItems.add(FolderItem.NoteItem(it)) }
-        whiteboards.forEach { newItems.add(FolderItem.WhiteboardItem(it)) }
-        subFolders.forEach { newItems.add(FolderItem.SubFolderItem(it)) }
-        lists.forEach { newItems.add(FolderItem.ListItem(it)) }
-        newItems.sortBy {
-            when (it) {
-                is FolderItem.NoteItem -> it.note.sortOrder
-                is FolderItem.WhiteboardItem -> it.wb.sortOrder
-                is FolderItem.SubFolderItem -> it.folder.sortOrder
-                is FolderItem.ListItem -> it.noteList.sortOrder
-            }
-        }
+        val newItems = buildSortedItems(notes, whiteboards, subFolders, lists)
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = items.size
             override fun getNewListSize() = newItems.size
@@ -96,6 +84,30 @@ class FolderAdapter(
         items.clear()
         items.addAll(newItems)
         diff.dispatchUpdatesTo(this)
+    }
+
+    /** Same as submitMixed but skips DiffUtil — forces every visible card to rebind. Use on resume. */
+    fun forceRefresh(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>) {
+        items.clear()
+        items.addAll(buildSortedItems(notes, whiteboards, subFolders, lists))
+        notifyDataSetChanged()
+    }
+
+    private fun buildSortedItems(notes: List<Note>, whiteboards: List<Whiteboard>, subFolders: List<Folder>, lists: List<NoteList>): MutableList<FolderItem> {
+        val newItems = mutableListOf<FolderItem>()
+        notes.forEach { newItems.add(FolderItem.NoteItem(it)) }
+        whiteboards.forEach { newItems.add(FolderItem.WhiteboardItem(it)) }
+        subFolders.forEach { newItems.add(FolderItem.SubFolderItem(it)) }
+        lists.forEach { newItems.add(FolderItem.ListItem(it)) }
+        newItems.sortBy {
+            when (it) {
+                is FolderItem.NoteItem -> it.note.sortOrder
+                is FolderItem.WhiteboardItem -> it.wb.sortOrder
+                is FolderItem.SubFolderItem -> it.folder.sortOrder
+                is FolderItem.ListItem -> it.noteList.sortOrder
+            }
+        }
+        return newItems
     }
 
     // Legacy single-type submit (notes only) — kept for compatibility

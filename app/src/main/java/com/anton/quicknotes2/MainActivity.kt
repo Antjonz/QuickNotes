@@ -305,7 +305,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!isDragging) refreshHomeList()
+        if (!isDragging) {
+            lifecycleScope.launch {
+                val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
+                val notes       = db.noteDao().getAllNotesDirect()
+                val folders     = db.folderDao().getAllFoldersDirect()
+                val whiteboards = db.whiteboardDao().getAllWhiteboardsDirect()
+                val lists       = db.noteListDao().getAllListsDirect()
+                val items = buildHomeList(folders, notes, whiteboards, lists)
+                adapter.forceRefresh(items)
+                binding.emptyText.visibility =
+                    if (items.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+            }
+        }
     }
 
     private fun refreshHomeList() {
