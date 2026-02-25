@@ -51,11 +51,30 @@ class FolderActivity : AppCompatActivity() {
     }
 
     private fun setCardHighlight(card: MaterialCardView?) {
-        highlightedCard?.strokeColor = android.graphics.Color.TRANSPARENT
-        highlightedCard?.strokeWidth = 0
+        if (highlightedCard != null) {
+            val orig = highlightedCard!!.getTag(R.id.tag_original_color) as? Int
+            if (orig != null) highlightedCard!!.setCardBackgroundColor(orig)
+        }
         highlightedCard = card
-        card?.strokeColor = 0xFF6650A4.toInt()
-        card?.strokeWidth = 6
+        if (card != null) {
+            if (card.getTag(R.id.tag_original_color) == null) {
+                card.setTag(R.id.tag_original_color, card.cardBackgroundColor.defaultColor)
+            }
+            val orig = card.getTag(R.id.tag_original_color) as Int
+            val r = (android.graphics.Color.red(orig) * 0.78f).toInt()
+            val g = (android.graphics.Color.green(orig) * 0.78f).toInt()
+            val b = (android.graphics.Color.blue(orig) * 0.78f).toInt()
+            card.setCardBackgroundColor(android.graphics.Color.rgb(r, g, b))
+        }
+    }
+
+    private fun isCentreOver(dragged: android.view.View, target: android.view.View): Boolean {
+        val dLoc = IntArray(2); dragged.getLocationOnScreen(dLoc)
+        val cx = dLoc[0] + dragged.width / 2
+        val cy = dLoc[1] + dragged.height / 2
+        val tLoc = IntArray(2); target.getLocationOnScreen(tLoc)
+        return cx in tLoc[0]..(tLoc[0] + target.width) &&
+               cy in tLoc[1]..(tLoc[1] + target.height)
     }
 
     private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -178,10 +197,11 @@ class FolderActivity : AppCompatActivity() {
                                   draggedItem is FolderItem.SubFolderItem ||
                                   draggedItem is FolderItem.ListItem
                 if (isDraggable && targetItem is FolderItem.SubFolderItem &&
-                    (draggedItem !is FolderItem.SubFolderItem || draggedItem.folder.id != targetItem.folder.id)) {
-                    val card = target.itemView as? MaterialCardView
-                    if (card != highlightedCard) {
-                        setCardHighlight(card)
+                    (draggedItem !is FolderItem.SubFolderItem || draggedItem.folder.id != targetItem.folder.id) &&
+                    isCentreOver(source.itemView, target.itemView)) {
+                    val draggedCard = source.itemView as? MaterialCardView
+                    if (draggedCard != highlightedCard) {
+                        setCardHighlight(draggedCard)
                         pendingSubFolderTarget = Pair(draggedItem!!, targetItem.folder)
                     }
                     if (dragOutView != null) {

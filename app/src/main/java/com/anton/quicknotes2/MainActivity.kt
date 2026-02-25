@@ -1,7 +1,6 @@
 package com.anton.quicknotes2
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,17 +42,40 @@ class MainActivity : AppCompatActivity() {
     private var pendingIconWhiteboardId: Int? = null
     private var pendingIconListId: Int? = null
 
-    // Drag-into-folder state — holds either a NoteItem or WhiteboardItem + the target folder
+    // The card currently highlighted as "pending move into folder" (the dragged item)
     private var highlightedCard: MaterialCardView? = null
     private var pendingFolderTarget: Pair<HomeItem, Folder>? = null
     private var draggingNote: Note? = null
 
+    /** Darken [card] (the dragged item) to signal it's about to be dropped into a folder.
+     *  Pass null to restore the previously highlighted card. */
     private fun setCardHighlight(card: MaterialCardView?) {
-        highlightedCard?.strokeColor = Color.TRANSPARENT
-        highlightedCard?.strokeWidth = 0
+        // Restore the previously highlighted dragged card
+        if (highlightedCard != null) {
+            val orig = highlightedCard!!.getTag(R.id.tag_original_color) as? Int
+            if (orig != null) highlightedCard!!.setCardBackgroundColor(orig)
+        }
         highlightedCard = card
-        card?.strokeColor = 0xFF6650A4.toInt()
-        card?.strokeWidth = 6
+        if (card != null) {
+            if (card.getTag(R.id.tag_original_color) == null) {
+                card.setTag(R.id.tag_original_color, card.cardBackgroundColor.defaultColor)
+            }
+            val orig = card.getTag(R.id.tag_original_color) as Int
+            val r = (android.graphics.Color.red(orig) * 0.78f).toInt()
+            val g = (android.graphics.Color.green(orig) * 0.78f).toInt()
+            val b = (android.graphics.Color.blue(orig) * 0.78f).toInt()
+            card.setCardBackgroundColor(android.graphics.Color.rgb(r, g, b))
+        }
+    }
+
+    /** Returns true if the centre of [dragged] is within the bounds of [target] on screen. */
+    private fun isCentreOver(dragged: android.view.View, target: android.view.View): Boolean {
+        val dLoc = IntArray(2); dragged.getLocationOnScreen(dLoc)
+        val cx = dLoc[0] + dragged.width / 2
+        val cy = dLoc[1] + dragged.height / 2
+        val tLoc = IntArray(2); target.getLocationOnScreen(tLoc)
+        return cx in tLoc[0]..(tLoc[0] + target.width) &&
+               cy in tLoc[1]..(tLoc[1] + target.height)
     }
 
     private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -169,30 +191,26 @@ class MainActivity : AppCompatActivity() {
                                   draggedItem is HomeItem.ListItem
 
                 when {
-                    // Hovering over cancel row → clear any folder highlight
+                    // Hovering over cancel row → clear folder highlight, no reorder
                     targetItem == null -> {
-                        if (highlightedCard != null) {
-                            setCardHighlight(null)
-                            pendingFolderTarget = null
-                        }
+                        if (highlightedCard != null) { setCardHighlight(null); pendingFolderTarget = null }
                         return false
                     }
-                    // Note, Whiteboard, or Folder hovering over a different folder → highlight
-                    isDraggable && targetItem is HomeItem.FolderItem &&
-                    (draggedItem !is HomeItem.FolderItem || draggedItem.folder.id != targetItem.folder.id) -> {
-                        val card = target.itemView as? MaterialCardView
-                        if (card != highlightedCard) {
-                            setCardHighlight(card)
+                    // Draggable item hovering over a different folder AND centre is inside it → highlight dragged item for drop-in
+                    isDraggable &&
+                    targetItem is HomeItem.FolderItem &&
+                    (draggedItem !is HomeItem.FolderItem || draggedItem.folder.id != targetItem.folder.id) &&
+                    isCentreOver(source.itemView, target.itemView) -> {
+                        val draggedCard = source.itemView as? MaterialCardView
+                        if (draggedCard != highlightedCard) {
+                            setCardHighlight(draggedCard)
                             pendingFolderTarget = Pair(draggedItem!!, targetItem.folder)
                         }
                         return false
                     }
-                    // Moving to a normal row — clear folder highlight
+                    // Otherwise: clear any folder highlight and do a normal reorder
                     else -> {
-                        if (highlightedCard != null) {
-                            setCardHighlight(null)
-                            pendingFolderTarget = null
-                        }
+                        if (highlightedCard != null) { setCardHighlight(null); pendingFolderTarget = null }
                         isDragging = true
                         adapter.moveItem(from, to)
                         return true
