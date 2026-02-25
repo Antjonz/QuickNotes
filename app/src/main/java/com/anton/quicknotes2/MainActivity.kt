@@ -303,6 +303,11 @@ class MainActivity : AppCompatActivity() {
         binding.fab.setOnClickListener { showFabMenu() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!isDragging) refreshHomeList()
+    }
+
     private fun refreshHomeList() {
         val folders = viewModel.allFolders.value ?: emptyList()
         val notes = viewModel.allNotes.value ?: emptyList()

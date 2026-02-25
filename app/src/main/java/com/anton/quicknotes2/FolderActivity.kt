@@ -45,6 +45,12 @@ class FolderActivity : AppCompatActivity() {
     private var highlightedCard: MaterialCardView? = null
     private var pendingSubFolderTarget: Pair<FolderItem, Folder>? = null
 
+    // Latest data cached for onResume refresh
+    private var latestNotes = emptyList<com.anton.quicknotes2.data.Note>()
+    private var latestWhiteboards = emptyList<com.anton.quicknotes2.data.Whiteboard>()
+    private var latestSubFolders = emptyList<Folder>()
+    private var latestLists = emptyList<NoteList>()
+
     private val viewModel: NoteViewModel by viewModels {
         val db = NoteDatabase.getDatabase(applicationContext)
         NoteViewModelFactory(NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao()))
@@ -274,10 +280,6 @@ class FolderActivity : AppCompatActivity() {
         touchHelper.attachToRecyclerView(binding.recyclerView)
         adapter.itemTouchHelper = touchHelper
 
-        var latestNotes = emptyList<com.anton.quicknotes2.data.Note>()
-        var latestWhiteboards = emptyList<com.anton.quicknotes2.data.Whiteboard>()
-        var latestSubFolders = emptyList<Folder>()
-        var latestLists = emptyList<NoteList>()
 
         fun refresh() {
             if (!isDragging) {
@@ -293,6 +295,14 @@ class FolderActivity : AppCompatActivity() {
         viewModel.getListsInFolder(folderId).observe(this) { latestLists = it; refresh() }
 
         binding.fab.setOnClickListener { showFabMenu() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Force rebind on return from note/whiteboard/list editor so title/icon changes appear immediately
+        if (!isDragging) {
+            adapter.submitMixed(latestNotes, latestWhiteboards, latestSubFolders, latestLists)
+        }
     }
 
     private fun showDeleteFolderDialog(folder: Folder) {
@@ -357,6 +367,42 @@ class FolderActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) viewModel.insertFolder(Folder(name = name, parentFolderId = folderId))
             }
             .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_folder, menu)
+        menu.findItem(R.id.action_rename_folder)?.icon?.setTint(android.graphics.Color.WHITE)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        if (item.itemId == R.id.action_rename_folder) {
+            showRenameFolderDialog()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    private fun showRenameFolderDialog() {
+        val dialogBinding = DialogNewFolderBinding.inflate(LayoutInflater.from(this))
+        // Pre-fill with the current folder name
+        dialogBinding.editFolderName.setText(supportActionBar?.title)
+        dialogBinding.editFolderName.selectAll()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Rename folder")
+            .setView(dialogBinding.root)
+            .setPositiveButton("Rename") { _, _ ->
+                val newName = dialogBinding.editFolderName.text.toString().trim()
+                if (newName.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        val folder = viewModel.getFolderById(folderId) ?: return@launch
+                        viewModel.updateFolder(folder.copy(name = newName))
+                        supportActionBar?.title = newName
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onSupportNavigateUp(): Boolean {
