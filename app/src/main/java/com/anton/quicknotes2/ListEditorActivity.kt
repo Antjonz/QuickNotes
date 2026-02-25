@@ -72,9 +72,10 @@ class ListEditorActivity : AppCompatActivity() {
 
         // Use DefaultItemAnimator with a longer move duration for smooth slide-down
         val animator = DefaultItemAnimator()
-        animator.moveDuration   = 250
-        animator.removeDuration = 150
-        animator.addDuration    = 200
+        animator.moveDuration   = 350
+        animator.removeDuration = 0
+        animator.addDuration    = 0
+        animator.changeDuration = 0
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.itemAnimator = animator
@@ -206,6 +207,44 @@ class ListEditorActivity : AppCompatActivity() {
      * Only updates labels; does NOT call notifyDataSetChanged during a drag.
      */
     private fun renumberUnchecked() {
+        renumberUncheckedSilent()
+        if (!isDragging) rowAdapter.notifyDataSetChanged()
+    }
+
+    private fun checkItem(pos: Int) {
+        val r = rows[pos]
+        r.item = r.item.copy(checked = true)
+        r.dirty = true
+        val dest = rows.size - 1
+        rows.removeAt(pos)
+        rows.add(r)
+        rowAdapter.notifyItemMoved(pos, dest)
+        // Wait for the move animation to finish before rebinding + renumbering
+        binding.recyclerView.postDelayed({
+            renumberUncheckedSilent()
+            rowAdapter.notifyItemChanged(dest)
+            // Refresh numbers on all unchecked rows
+            rows.forEachIndexed { i, row -> if (!row.item.checked) rowAdapter.notifyItemChanged(i) }
+        }, 370)
+    }
+
+    private fun uncheckItem(pos: Int) {
+        val r = rows[pos]
+        r.item = r.item.copy(checked = false)
+        r.dirty = true
+        val uncheckedCount = rows.count { !it.item.checked }
+        val targetPos = r.item.position.coerceIn(0, uncheckedCount)
+        rows.removeAt(pos)
+        rows.add(targetPos, r)
+        rowAdapter.notifyItemMoved(pos, targetPos)
+        binding.recyclerView.postDelayed({
+            renumberUncheckedSilent()
+            rows.forEachIndexed { i, _ -> rowAdapter.notifyItemChanged(i) }
+        }, 370)
+    }
+
+    /** Update position numbers in the data only — no notify calls. */
+    private fun renumberUncheckedSilent() {
         var num = 0
         rows.forEach { row ->
             if (!row.item.checked) {
@@ -216,32 +255,6 @@ class ListEditorActivity : AppCompatActivity() {
                 num++
             }
         }
-        if (!isDragging) rowAdapter.notifyDataSetChanged()
-    }
-
-    private fun checkItem(pos: Int) {
-        val r = rows[pos]
-        r.item = r.item.copy(checked = true)
-        r.dirty = true
-        rows.removeAt(pos)
-        rows.add(r)
-        rowAdapter.notifyItemRemoved(pos)
-        rowAdapter.notifyItemInserted(rows.size - 1)
-        binding.recyclerView.post { renumberUnchecked() }
-    }
-
-    private fun uncheckItem(pos: Int) {
-        val r = rows[pos]
-        r.item = r.item.copy(checked = false)
-        r.dirty = true
-        // targetPos is the saved numbered position, clamped to unchecked count
-        val uncheckedCount = rows.count { !it.item.checked } // excludes current (still checked in list)
-        val targetPos = r.item.position.coerceIn(0, uncheckedCount)
-        rows.removeAt(pos)
-        rows.add(targetPos, r)
-        rowAdapter.notifyItemRemoved(pos)
-        rowAdapter.notifyItemInserted(targetPos)
-        binding.recyclerView.post { renumberUnchecked() }
     }
 
     private fun save() {
@@ -326,9 +339,6 @@ class ListEditorActivity : AppCompatActivity() {
                         rows[p].dirty = true
                     }
                 }
-            }
-            holder.editText.setOnEditorActionListener { _, _, _ ->
-                holder.editText.clearFocus(); addNewRow(); true
             }
 
             // Checkbox — clear listener before setting isChecked to avoid re-entrancy

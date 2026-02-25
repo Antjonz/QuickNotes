@@ -45,9 +45,8 @@
             android:background="@null"
             android:textSize="15sp"
             android:hint="Item"
-            android:inputType="text"
-            android:maxLines="1"
-            android:imeOptions="actionDone" />
+            android:inputType="textMultiLine|textCapSentences"
+            android:gravity="top" />
 
         <!-- Checkbox -->
         <CheckBox
