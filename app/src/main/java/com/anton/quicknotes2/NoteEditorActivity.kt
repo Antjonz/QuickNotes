@@ -24,6 +24,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -303,6 +305,40 @@ class NoteEditorActivity : AppCompatActivity() {
 
         // Observe images only when we have a note ID
         if (noteId != -1) observeImages(noteId)
+
+        // Pad the scroll view bottom when the keyboard opens so the cursor stays visible
+        val scrollBasePadding = binding.bodyScrollView.paddingBottom
+        var lastKbHeight = 0
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navInset = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val kbHeight = (imeInset.bottom - navInset.bottom).coerceAtLeast(0)
+            if (kbHeight != lastKbHeight) {
+                lastKbHeight = kbHeight
+                binding.bodyScrollView.setPadding(
+                    binding.bodyScrollView.paddingLeft,
+                    binding.bodyScrollView.paddingTop,
+                    binding.bodyScrollView.paddingRight,
+                    scrollBasePadding + kbHeight
+                )
+                // After the padding settles, scroll so the cursor line is visible
+                if (kbHeight > 0) {
+                    binding.bodyScrollView.postDelayed({
+                        val layout = binding.editBody.layout ?: return@postDelayed
+                        val cursorLine = layout.getLineForOffset(
+                            binding.editBody.selectionStart.coerceAtLeast(0))
+                        val cursorBottom = layout.getLineBottom(cursorLine) +
+                            binding.editBody.paddingTop
+                        val scrollTo = cursorBottom -
+                            (binding.bodyScrollView.height - kbHeight - scrollBasePadding)
+                        if (scrollTo > binding.bodyScrollView.scrollY) {
+                            binding.bodyScrollView.smoothScrollTo(0, scrollTo)
+                        }
+                    }, 100)
+                }
+            }
+            insets
+        }
 
         onBackPressedDispatcher.addCallback(this) {
             if (hasUnsavedChanges()) {

@@ -137,26 +137,27 @@ class ListEditorActivity : AppCompatActivity() {
 
         binding.fabAddItem.setOnClickListener { addNewRow() }
 
-        // Use WindowInsets to track keyboard height and pad the RecyclerView accordingly
-        val rvDefaultBottomPadding = binding.recyclerView.paddingBottom
+        // Use WindowInsets to track keyboard height and pad the RecyclerView accordingly.
+        // We keep the base padding (set in XML) so the list can always be scrolled past
+        // the last item. We ADD the keyboard height so items above it remain reachable.
+        val rvBasePadding = binding.recyclerView.paddingBottom
+        var lastKeyboardHeight = 0
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
             val navInset = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val keyboardHeight = imeInset.bottom
-            val newBottomPadding = if (keyboardHeight > 0) {
-                keyboardHeight - navInset.bottom + rvDefaultBottomPadding
-            } else {
-                rvDefaultBottomPadding
-            }
-            binding.recyclerView.setPadding(
-                binding.recyclerView.paddingLeft,
-                binding.recyclerView.paddingTop,
-                binding.recyclerView.paddingRight,
-                newBottomPadding
-            )
-            // Scroll focused item into view after padding update
-            if (keyboardHeight > 0) {
-                binding.recyclerView.post { scrollFocusedItemIntoView() }
+            val keyboardHeight = (imeInset.bottom - navInset.bottom).coerceAtLeast(0)
+            if (keyboardHeight != lastKeyboardHeight) {
+                lastKeyboardHeight = keyboardHeight
+                binding.recyclerView.setPadding(
+                    binding.recyclerView.paddingLeft,
+                    binding.recyclerView.paddingTop,
+                    binding.recyclerView.paddingRight,
+                    rvBasePadding + keyboardHeight
+                )
+                if (keyboardHeight > 0) {
+                    // Give layout a moment to settle, then bring focused item into view
+                    binding.recyclerView.postDelayed({ scrollFocusedItemIntoView() }, 100)
+                }
             }
             insets
         }
@@ -286,22 +287,34 @@ class ListEditorActivity : AppCompatActivity() {
 
     private fun scrollFocusedItemIntoView() {
         val focused = currentFocus ?: return
+        // Walk up the view tree to find the direct child of RecyclerView
         var v: View? = focused
-        while (v != null && v.parent !== binding.recyclerView) {
-            v = v.parent as? View
+        while (v != null) {
+            val parent = v.parent
+            if (parent === binding.recyclerView) break
+            v = parent as? View
         }
         val child = v ?: return
-        val position = binding.recyclerView.getChildAdapterPosition(child)
-        if (position == RecyclerView.NO_ID.toInt()) return
-        val lm = binding.recyclerView.layoutManager as? LinearLayoutManager ?: return
-        val rvRect = Rect()
-        binding.recyclerView.getGlobalVisibleRect(rvRect)
-        val childRect = Rect()
-        child.getGlobalVisibleRect(childRect)
-        // Visible bottom = recycler bottom minus current bottom padding (keyboard area)
-        val visibleBottom = rvRect.bottom - binding.recyclerView.paddingBottom
-        if (childRect.bottom > visibleBottom || childRect.top < rvRect.top) {
-            lm.scrollToPositionWithOffset(position, 16)
+
+
+        // Coordinates relative to the RecyclerView
+        val rvTop = binding.recyclerView.paddingTop
+        // Visible bottom = RecyclerView height minus the bottom padding (keyboard area)
+        val rvVisibleBottom = binding.recyclerView.height - binding.recyclerView.paddingBottom
+
+        val childTop = child.top
+        val childBottom = child.bottom
+
+        when {
+            childBottom > rvVisibleBottom -> {
+                // Item is below the visible area — scroll down so it's fully visible
+                binding.recyclerView.smoothScrollBy(0, childBottom - rvVisibleBottom + 8)
+            }
+            childTop < rvTop -> {
+                // Item is above the visible area — scroll up
+                binding.recyclerView.smoothScrollBy(0, childTop - rvTop - 8)
+            }
+            // else already visible — no scroll needed
         }
     }
 
@@ -381,9 +394,8 @@ class ListEditorActivity : AppCompatActivity() {
                 if (hasFocus) {
                     val p = holder.bindingAdapterPosition
                     if (p != RecyclerView.NO_ID.toInt()) {
-                        binding.recyclerView.postDelayed({
-                            scrollFocusedItemIntoView()
-                        }, 100)
+                        // Short delay so the keyboard has time to open and insets are applied
+                        binding.recyclerView.postDelayed({ scrollFocusedItemIntoView() }, 200)
                     }
                 } else {
                     val p = holder.bindingAdapterPosition

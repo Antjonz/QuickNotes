@@ -19,12 +19,14 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- Root below AppBar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <!-- Title field — always visible, not scrollable -->
         <EditText
             android:id="@+id/editTitle"
             android:layout_width="match_parent"
@@ -43,7 +45,7 @@
             android:layout_height="1dp"
             android:background="@android:color/transparent" />
 
-        <!-- Formatting toolbar -->
+        <!-- Formatting toolbar — pinned, not scrolled -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="48dp"
@@ -59,7 +61,6 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp">
 
-                <!-- Bold -->
                 <Button
                     android:id="@+id/btnBold"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -75,7 +76,6 @@
                     android:background="@drawable/bg_format_button"
                     android:textColor="@color/format_button_text" />
 
-                <!-- Italic -->
                 <Button
                     android:id="@+id/btnItalic"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -91,7 +91,6 @@
                     android:background="@drawable/bg_format_button"
                     android:textColor="@color/format_button_text" />
 
-                <!-- Underline -->
                 <Button
                     android:id="@+id/btnUnderline"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -105,10 +104,8 @@
                     android:background="@drawable/bg_format_button"
                     android:textColor="@color/format_button_text" />
 
-                <!-- Spacer -->
                 <Space android:layout_width="12dp" android:layout_height="40dp" />
 
-                <!-- Font size (D/S/N/L/H) -->
                 <Button
                     android:id="@+id/btnTextSize"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -125,7 +122,6 @@
                     android:textColor="@color/format_button_text"
                     android:contentDescription="Text size" />
 
-                <!-- Letter color (A with coloured bar) -->
                 <ImageButton
                     android:id="@+id/btnTextColor"
                     android:layout_width="40dp"
@@ -137,7 +133,6 @@
                     android:padding="6dp"
                     android:contentDescription="Text color" />
 
-                <!-- Bar / highlight color -->
                 <ImageButton
                     android:id="@+id/btnTextHighlight"
                     android:layout_width="40dp"
@@ -148,10 +143,8 @@
                     android:padding="6dp"
                     android:contentDescription="Text highlight" />
 
-                <!-- Spacer -->
                 <Space android:layout_width="12dp" android:layout_height="40dp" />
 
-                <!-- Special characters / icon -->
                 <Button
                     android:id="@+id/btnSpecialChar"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -167,7 +160,6 @@
                     android:textColor="@color/format_button_text"
                     android:contentDescription="Special characters" />
 
-                <!-- Tab -->
                 <Button
                     android:id="@+id/btnTab"
                     style="@style/Widget.AppCompat.Button.Borderless"
@@ -185,16 +177,27 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <com.anton.quicknotes2.TabEditText
-            android:id="@+id/editBody"
+        <!-- Body scrolls freely — grows as text is added, always scrollable -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/bodyScrollView"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="@null"
-            android:gravity="top"
-            android:hint="@string/body_hint"
-            android:padding="16dp"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:fillViewport="true"
+            android:clipToPadding="false"
+            android:paddingBottom="24dp">
+
+            <com.anton.quicknotes2.TabEditText
+                android:id="@+id/editBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@null"
+                android:gravity="top"
+                android:hint="@string/body_hint"
+                android:padding="16dp"
+                android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+        </androidx.core.widget.NestedScrollView>
 
         <!-- Divider above image strip -->
         <View
