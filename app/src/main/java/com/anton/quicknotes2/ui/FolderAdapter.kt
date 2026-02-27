@@ -162,9 +162,7 @@ class FolderAdapter(
         RecyclerView.ViewHolder(binding.root) {
         fun bind(note: Note) {
             binding.textTitle.text = note.title.ifBlank { "Untitled" }
-            binding.textBody.text = if (note.body.startsWith("<")) {
-                android.text.Html.fromHtml(note.body, android.text.Html.FROM_HTML_MODE_COMPACT).toString()
-            } else note.body
+            binding.textBody.text = com.anton.quicknotes2.RichTextSerializer.deserialize(note.body).toString()
             binding.textTimestamp.text = SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()).format(Date(note.timestamp))
             binding.root.setOnClickListener { onNoteClick(note) }
             binding.btnDelete.setOnClickListener { onNoteDelete(note) }
@@ -202,7 +200,7 @@ class FolderAdapter(
             binding.root.setOnClickListener { onSubFolderClick(folder) }
             binding.btnDelete.setOnClickListener { onSubFolderDelete(folder) }
             binding.itemIcon.setOnClickListener { onSubFolderIconClick(folder) }
-            val defaultGray = Color.parseColor("#FF757575")
+            val defaultGray = Color.parseColor("#FF6650A4")
             if (folder.labelColor != null) {
                 try { binding.root.setCardBackgroundColor(Color.parseColor(folder.labelColor)) } catch (_: Exception) {}
                 binding.textFolderName.setTextColor(Color.BLACK)

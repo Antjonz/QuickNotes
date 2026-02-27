@@ -145,9 +145,7 @@ class HomeAdapter(
         RecyclerView.ViewHolder(binding.root) {
         fun bind(note: Note) {
             binding.textTitle.text = note.title.ifBlank { "Untitled" }
-            binding.textBody.text = if (note.body.startsWith("<"))
-                android.text.Html.fromHtml(note.body, android.text.Html.FROM_HTML_MODE_COMPACT).toString()
-            else note.body
+            binding.textBody.text = com.anton.quicknotes2.RichTextSerializer.deserialize(note.body).toString()
             binding.textTimestamp.text = formatDate(note.timestamp)
             binding.root.setOnClickListener { onNoteClick(note) }
             binding.btnDelete.setOnClickListener { onNoteDelete(note) }
@@ -174,7 +172,7 @@ class HomeAdapter(
                 try { binding.root.setCardBackgroundColor(Color.parseColor(folder.labelColor)) } catch (_: Exception) {}
                 binding.textFolderName.setTextColor(Color.BLACK)
             } else {
-                binding.root.setCardBackgroundColor(Color.parseColor("#FF757575"))
+                binding.root.setCardBackgroundColor(Color.parseColor("#FF6650A4"))
                 binding.textFolderName.setTextColor(Color.WHITE)
             }
             applyIconUri(binding.itemIcon, folder.iconUri, com.anton.quicknotes2.R.drawable.ic_folder_default)

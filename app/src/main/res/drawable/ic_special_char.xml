@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Checkmark / special symbol icon - using Omega/special char symbol -->
+    <path
+        android:fillColor="@android:color/black"
+        android:pathData="M11,17v-1.5c-2.49,-0.45 -4,-2.5 -4,-5C7,7.57 8.57,6 11,6s4,1.57 4,4.5c0,2.5 -1.51,4.55 -4,5V17H8v2h8v-2h-3zM11,8c-1.33,0 -2,0.83 -2,2.5C9,12.38 9.86,13.5 11,13.5s2,-1.12 2,-3c0,-1.67 -0.67,-2.5 -2,-2.5z" />
+</vector>
+

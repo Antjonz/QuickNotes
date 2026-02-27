@@ -2,18 +2,23 @@ package com.anton.quicknotes2
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
-import android.text.Html
-import android.text.Spannable
-import android.text.SpannableStringBuilder
 import android.text.Editable
+import android.text.Spannable
 import android.text.TextWatcher
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.PopupMenu
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -36,10 +41,6 @@ import kotlinx.coroutines.launch
 
 class NoteEditorActivity : AppCompatActivity() {
 
-    companion object {
-        const val EXTRA_NOTE_ID = "extra_note_id"
-        const val EXTRA_FOLDER_ID = "extra_folder_id"
-    }
 
     private lateinit var binding: ActivityNoteEditorBinding
     private lateinit var imageAdapter: NoteImageAdapter
@@ -62,7 +63,49 @@ class NoteEditorActivity : AppCompatActivity() {
     private var isUnderlineActive = false
     private var isApplyingFormat = false  // guard to prevent TextWatcher re-entrance
 
-    // Photo picker launcher
+    // Font size: null = default, otherwise sp value
+    private var activeFontSizeSp: Int? = null
+
+    // Text color: null = default (black)
+    private var activeTextColor: Int? = null
+
+    // Text highlight/background color: null = none
+    private var activeHighlightColor: Int? = null
+
+    // Last chosen special character (default = checkmark)
+    private var lastSpecialChar: String = "✓"
+
+    // Tab indent tracking
+    private var isHandlingTab = false
+
+    companion object {
+        const val EXTRA_NOTE_ID = "extra_note_id"
+        const val EXTRA_FOLDER_ID = "extra_folder_id"
+        const val TAB_SPACES = "      " // 6 spaces
+        const val MAX_TABS = 8          // maximum tab stops per line
+        // Font size options (sp values) + button label letter
+        val FONT_SIZES = listOf(
+            Triple("Small",  "S", 12),
+            Triple("Normal", "N", 16),
+            Triple("Large",  "L", 20),
+            Triple("Huge",   "H", 28)
+        )
+        val DEFAULT_SPECIAL_CHAR = "✓"
+        val SPECIAL_CHARS = listOf(
+            "✓ Checkmark" to "✓",
+            "✗ Cross" to "✗",
+            "= Equals" to "=",
+            "€ Euro" to "€",
+            "→ Arrow" to "→",
+            "★ Star" to "★",
+            "• Bullet" to "•",
+            "… Ellipsis" to "…",
+            "° Degree" to "°",
+            "¼ Quarter" to "¼",
+            "½ Half" to "½",
+            "¾ Three quarters" to "¾"
+        )
+    }
     private val pickImages = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
@@ -117,20 +160,10 @@ class NoteEditorActivity : AppCompatActivity() {
                 note?.let {
                     existingNote = it
                     binding.editTitle.setText(it.title)
-                    // Load body: if HTML, parse spans; otherwise plain text
-                    if (it.body.contains("<") && it.body.contains(">")) {
-                        binding.editBody.setText(Html.fromHtml(it.body, Html.FROM_HTML_MODE_COMPACT))
-                    } else {
-                        binding.editBody.setText(it.body)
-                    }
+                    binding.editBody.setText(RichTextSerializer.deserialize(it.body))
                     originalTitle = it.title
-                    // Normalize originalBody the same way hasUnsavedChanges() does,
-                    // so plain-text bodies imported from old backups don't trigger a
-                    // false "unsaved changes" warning before the user types anything.
-                    originalBody = Html.toHtml(
-                        binding.editBody.text,
-                        Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE
-                    ).trim()
+                    // Normalize so a just-loaded note doesn't falsely appear "changed"
+                    originalBody = RichTextSerializer.serialize(binding.editBody.text)
                 }
             }
         }
@@ -166,12 +199,35 @@ class NoteEditorActivity : AppCompatActivity() {
             updateFormatButtonStates()
         }
 
-        // TextWatcher: apply active formats to each character as it's typed
+        // ── Font size button ───────────────────────────────
+        binding.btnTextSize.setOnClickListener { showFontSizeMenu(it) }
+
+        // ── Tab button ─────────────────────────────────────
+        binding.btnTab.setOnClickListener { insertTab() }
+
+        // ── Text color button ──────────────────────────────
+        binding.btnTextColor.setOnClickListener { showTextColorMenu(it) }
+
+        // ── Text highlight button ──────────────────────────
+        binding.btnTextHighlight.setOnClickListener { showHighlightMenu(it) }
+
+        // ── Special characters button ──────────────────────
+        // Single tap: insert last chosen char (default ✓)
+        binding.btnSpecialChar.setOnClickListener { insertSpecialChar(lastSpecialChar) }
+        // Long press: show picker menu
+        binding.btnSpecialChar.setOnLongClickListener {
+            showSpecialCharMenu(it)
+            true
+        }
+
+        // TextWatcher: only apply active format spans to newly typed characters
         binding.editBody.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (isApplyingFormat || count == 0) return
-                if (!isBoldActive && !isItalicActive && !isUnderlineActive) return
+                if (isApplyingFormat || isHandlingTab || count == 0) return
+                val hasAnyFormat = isBoldActive || isItalicActive || isUnderlineActive ||
+                    activeFontSizeSp != null || activeTextColor != null || activeHighlightColor != null
+                if (!hasAnyFormat) return
                 isApplyingFormat = true
                 val text = binding.editBody.text as? Spannable ?: run { isApplyingFormat = false; return }
                 if (isBoldActive)
@@ -180,10 +236,21 @@ class NoteEditorActivity : AppCompatActivity() {
                     text.setSpan(StyleSpan(Typeface.ITALIC), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 if (isUnderlineActive)
                     text.setSpan(UnderlineSpan(), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                activeFontSizeSp?.let { sp ->
+                    text.setSpan(AbsoluteSizeSpan(sp, true), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                activeTextColor?.let { color ->
+                    text.setSpan(ForegroundColorSpan(color), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                activeHighlightColor?.let { color ->
+                    text.setSpan(BackgroundColorSpan(color), start, start + count, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
                 isApplyingFormat = false
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+
+        // (no setOnKeyListener — it breaks soft keyboard input on wrapped lines)
 
         // ── Image thumbnail strip ──────────────────────────
         imageAdapter = NoteImageAdapter(
@@ -290,6 +357,169 @@ class NoteEditorActivity : AppCompatActivity() {
         binding.btnUnderline.isSelected = isUnderlineActive
     }
 
+    // ── Font size ──────────────────────────────────────────────────────────────
+    private fun showFontSizeMenu(anchor: View) {
+        val btn = anchor as? android.widget.Button
+        val popup = android.widget.PopupMenu(this, anchor)
+        popup.menu.add(0, 0, 0, "Default")
+        FONT_SIZES.forEachIndexed { index, (label, _, _) ->
+            popup.menu.add(0, index + 1, index + 1, label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == 0) {
+                if (hasSelection()) {
+                    val text = binding.editBody.text as? Spannable ?: return@setOnMenuItemClickListener true
+                    val start = binding.editBody.selectionStart
+                    val end = binding.editBody.selectionEnd
+                    text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { text.removeSpan(it) }
+                }
+                activeFontSizeSp = null
+                btn?.text = "D"
+                btn?.isSelected = false
+            } else {
+                val (_, letter, sp) = FONT_SIZES[item.itemId - 1]
+                activeFontSizeSp = sp
+                btn?.text = letter
+                btn?.isSelected = false  // no background change for size button
+                if (hasSelection()) {
+                    val text = binding.editBody.text as? Spannable ?: return@setOnMenuItemClickListener true
+                    val start = binding.editBody.selectionStart
+                    val end = binding.editBody.selectionEnd
+                    text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { text.removeSpan(it) }
+                    text.setSpan(AbsoluteSizeSpan(sp, true), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            true
+        }
+        popup.show()
+    }
+
+    // ── Tab logic ──────────────────────────────────────────────────────────────
+    private fun insertTab() {
+        val text = binding.editBody.text ?: return
+        val cursor = binding.editBody.selectionStart.coerceAtLeast(0)
+        val lineStart = text.lastIndexOf('\n', cursor - 1).let { if (it < 0) 0 else it + 1 }
+        val prefix = text.substring(lineStart, cursor)
+        var tabCount = 0; var idx = 0
+        while (idx + TAB_SPACES.length <= prefix.length &&
+            prefix.substring(idx, idx + TAB_SPACES.length) == TAB_SPACES) {
+            tabCount++; idx += TAB_SPACES.length
+        }
+        if (tabCount >= MAX_TABS) return
+        isHandlingTab = true
+        try { text.insert(cursor, TAB_SPACES) }
+        finally { isHandlingTab = false }
+    }
+
+
+    // ── Text color ─────────────────────────────────────────────────────────────
+    private fun showTextColorMenu(anchor: View) {
+        val colorOptions = listOf(
+            "Default (black)" to null as Int?,
+            "Red"      to Color.parseColor("#D32F2F"),
+            "Orange"   to Color.parseColor("#E65100"),
+            "Yellow"   to Color.parseColor("#F9A825"),
+            "Green"    to Color.parseColor("#2E7D32"),
+            "Blue"     to Color.parseColor("#1565C0"),
+            "Purple"   to Color.parseColor("#6A1B9A"),
+            "Pink"     to Color.parseColor("#AD1457"),
+            "Gray"     to Color.parseColor("#616161")
+        )
+        val popup = android.widget.PopupMenu(this, anchor)
+        colorOptions.forEachIndexed { index, (label, _) ->
+            popup.menu.add(0, index, index, label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            val (_, color) = colorOptions[item.itemId]
+            activeTextColor = color
+            // Update button background to show the active color
+            applyColorButtonBackground(anchor, color)
+            if (hasSelection()) {
+                val text = binding.editBody.text as? Spannable ?: return@setOnMenuItemClickListener true
+                val start = binding.editBody.selectionStart
+                val end = binding.editBody.selectionEnd
+                text.getSpans(start, end, ForegroundColorSpan::class.java).forEach { text.removeSpan(it) }
+                if (color != null) {
+                    text.setSpan(ForegroundColorSpan(color), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            true
+        }
+        popup.show()
+    }
+
+    /**
+     * Sets the button background to a solid rounded rectangle in [color],
+     * or reverts to the default outlined bg_format_button when [color] is null.
+     */
+    private fun applyColorButtonBackground(view: View, color: Int?) {
+        if (color == null) {
+            view.background = ContextCompat.getDrawable(this, R.drawable.bg_format_button)
+        } else {
+            val shape = android.graphics.drawable.GradientDrawable()
+            shape.cornerRadius = 8 * resources.displayMetrics.density
+            shape.setColor(color)
+            view.background = shape
+        }
+    }
+
+    // ── Text highlight / background color ─────────────────────────────────────
+    private fun showHighlightMenu(anchor: View) {
+        val colorOptions = listOf(
+            "None"         to null as Int?,
+            "Yellow"       to Color.parseColor("#FFF9A825"),
+            "Green"        to Color.parseColor("#FFA5D6A7"),
+            "Blue"         to Color.parseColor("#FF90CAF9"),
+            "Pink"         to Color.parseColor("#FFF48FB1"),
+            "Orange"       to Color.parseColor("#FFFFCC80"),
+            "Purple"       to Color.parseColor("#FFCE93D8"),
+            "Gray"         to Color.parseColor("#FFE0E0E0")
+        )
+        val popup = android.widget.PopupMenu(this, anchor)
+        colorOptions.forEachIndexed { index, (label, _) ->
+            popup.menu.add(0, index, index, label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            val (_, color) = colorOptions[item.itemId]
+            activeHighlightColor = color
+            applyColorButtonBackground(anchor, color)
+            if (hasSelection()) {
+                val text = binding.editBody.text as? Spannable ?: return@setOnMenuItemClickListener true
+                val start = binding.editBody.selectionStart
+                val end = binding.editBody.selectionEnd
+                text.getSpans(start, end, BackgroundColorSpan::class.java).forEach { text.removeSpan(it) }
+                if (color != null) {
+                    text.setSpan(BackgroundColorSpan(color), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            true
+        }
+        popup.show()
+    }
+
+    // ── Special characters ─────────────────────────────────────────────────────
+    private fun insertSpecialChar(char: String) {
+        val text = binding.editBody.text ?: return
+        val cursor = binding.editBody.selectionStart.coerceAtLeast(0)
+        text.insert(cursor, char)
+    }
+
+    private fun showSpecialCharMenu(anchor: View) {
+        val popup = android.widget.PopupMenu(this, anchor)
+        SPECIAL_CHARS.forEachIndexed { index, (label, _) ->
+            popup.menu.add(0, index, index, label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            val (_, char) = SPECIAL_CHARS[item.itemId]
+            lastSpecialChar = char
+            // Update button text to show the chosen character
+            (anchor as? android.widget.Button)?.text = char
+            insertSpecialChar(char)
+            true
+        }
+        popup.show()
+    }
+
     private fun observeImages(noteId: Int) {
         viewModel.getImagesForNote(noteId).observe(this) { images ->
             if (!isDraggingImages) {
@@ -325,9 +555,7 @@ class NoteEditorActivity : AppCompatActivity() {
             R.id.action_save -> {
                 lifecycleScope.launch {
                     val title = binding.editTitle.text.toString().trim()
-                    // Serialize rich text to HTML
-                    val spanned = binding.editBody.text
-                    val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
+                    val body = RichTextSerializer.serialize(binding.editBody.text)
                     val now = System.currentTimeMillis()
                     val current = existingNote
                     if (current == null) {
@@ -347,8 +575,7 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private fun hasUnsavedChanges(): Boolean {
         val title = binding.editTitle.text.toString().trim()
-        val spanned = binding.editBody.text
-        val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
+        val body = RichTextSerializer.serialize(binding.editBody.text)
         return title != originalTitle || body != originalBody
     }
 
@@ -365,8 +592,7 @@ class NoteEditorActivity : AppCompatActivity() {
     private suspend fun ensureNoteSaved() {
         if (currentNoteId != -1) return
         val title = binding.editTitle.text.toString().trim()
-        val spanned = binding.editBody.text
-        val body = Html.toHtml(spanned, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE).trim()
+        val body = RichTextSerializer.serialize(binding.editBody.text)
         val now = System.currentTimeMillis()
         val db = NoteDatabase.getDatabase(applicationContext)
         val repo = NoteRepository(db.noteDao(), db.folderDao(), db.noteImageDao(), db.whiteboardDao(), db.noteListDao(), db.dividerDao())

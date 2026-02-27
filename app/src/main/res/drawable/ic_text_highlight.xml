@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Letter A -->
+    <path
+        android:fillColor="#FF212121"
+        android:pathData="M4,17l4.5,-12h2.5l4.5,12h-2.2l-1,-3h-5.1l-1,3H4zM8.1,12h3.8l-1.9,-5.5L8.1,12z" />
+    <!-- Highlight bar at bottom (yellow) -->
+    <path
+        android:fillColor="#FFF9A825"
+        android:pathData="M2,19h14v3H2z" />
+    <!-- Small pen/marker tip on the right -->
+    <path
+        android:fillColor="#FF212121"
+        android:pathData="M17.5,17.5l3,-3 -1.5,-1.5 -3,3zM17,20l1,-3.5 2.5,2.5z" />
+</vector>
+

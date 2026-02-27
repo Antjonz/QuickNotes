@@ -42,29 +42,43 @@ An Android note-taking app where you can create notes, lists, whiteboards and fo
 ### Folders
 - Create folders to group things together — you can put folders inside folders
 - Tap a folder to open it and see what's inside
-- Folders look visually different from notes (darker card) so they're easy to spot
+- Folders are shown in purple so they're easy to spot at a glance
 
 ### Item types at a glance
 Each card has a coloured left stripe so you always know what you're looking at:
 - 🟢 **Note** — teal stripe
 - 🔵 **List** — blue stripe
 - 🟣 **Whiteboard** — purple stripe
-- **Folder** — dark gray card (no stripe)
+- **Folder** — purple card (no stripe)
 - **Divider** — a thin horizontal line with an optional label; drag it just like any other item to organize your screen
 
 ### Custom icons
 - Tap the small square icon on any note, list, whiteboard or folder card
-- A popup asks whether you want to use **a picture**, **a solid color**, or **reset to the default icon**
-- The image is cropped to a square
+- A popup asks whether you want to use **a picture**, **a solid color** (with rounded corners), or **reset to the default icon**
+- For notes, lists and whiteboards you can also **change the label color** from the same popup
+- The icon button on the card immediately updates to show the chosen image or color
 
-### Note label color
-- Long-press any note card to bring up a color palette
-- Pick a color to tint the whole card background
-- Tap the white swatch to reset to the default white
+### Label colors
+- Tap the icon on any note, list or whiteboard card and choose **Change label color**
+- Pick a color to tint the whole card background — the colored left stripe is hidden when a custom color is set and the title turns black for readability
+- Pick the white swatch to reset to the default white card
 
 ### Text formatting in notes
-- When editing a note, select some text and tap **B** (bold), **I** (italic), or **U** (underline) in the toolbar to format it
-- Tap again while the text is selected to remove the formatting
+The formatting toolbar appears between the title and the body when editing a note:
+
+| Button | What it does |
+|--------|-------------|
+| **B** | Bold (toggle) |
+| **I** | Italic (toggle) |
+| **U** | Underline (toggle) |
+| **D / S / N / L / H** | Font size — Default / Small / Normal / Large / Huge |
+| **A** (color bar) | Letter color — choose from a palette; button background shows the active color |
+| **A** (highlight bar) | Text highlight / background color |
+| **✓** (icon button) | Special characters — hold to pick from a list (✓ ✗ = € → ★ • … ° ½ etc.); tap to insert the last chosen one; the button updates to show the current character |
+| **↹** | Tab — inserts a 6-space indent at the cursor; press backspace to remove the whole tab in one go; pressing Enter on a tabbed line continues the indent on the next line |
+
+- Toggle buttons (B / I / U) turn black with a white icon when active
+- All formatting is preserved exactly when you save and reopen a note, and when you export/import
 
 ### Adding things
 - Tap the **+** button at the bottom right of any screen
@@ -78,12 +92,11 @@ Each card has a coloured left stripe so you always know what you're looking at:
 - Deleting a folder with content inside asks whether you want to delete the contents or move them out first
 
 ### Reordering
-- Hold the handle icon (≡) on the left of any card and drag to reorder
+- Hold anywhere on a card and drag to reorder
 - The order is saved between sessions
 
 ### Moving things into folders
-- On the home screen, drag any item — as you hover your finger over a folder the card you're dragging gets darker to show it's about to be moved inside
-- The move only triggers when the centre of the dragged card is directly over the folder
+- On the home screen, drag any item — as you hover your finger directly over a folder the dragged card gets darker to show it's about to be moved inside
 - Release to move it in, or drag somewhere else and release to just reorder
 - Inside a folder there is a **"↑ Move out of folder"** bar at the top — drag an item onto it to move it back out
 - At the bottom there is a **"Cancel"** zone — drag there and release to cancel the move
@@ -92,7 +105,7 @@ Each card has a coloured left stripe so you always know what you're looking at:
 - Tap the image button inside a note to add photos
 - Photos appear as small thumbnails in a strip at the bottom
 - Tap a thumbnail to view it full screen; swipe left/right to browse, swipe down to close
-- Tap the trash icon next to the add-photo button to enter remove mode — ✕ badges appear; tap one to remove that photo
+- Tap the trash icon next to the add-photo button to enter remove mode — ✕ badges appear; tap one to remove that photo without a confirmation prompt
 - Long-press a thumbnail and drag to reorder photos
 
 ### Export / Import
@@ -103,12 +116,13 @@ Each card has a coloured left stripe so you always know what you're looking at:
 - If there's nothing to export, you'll see a warning
 - If there is data, the app shows you the file size without pictures and with pictures
 - Choose whether to include pictures or not, then pick where to save the `.qnbackup` file
-- The backup includes notes (with rich text), lists, whiteboards, folders, dividers, custom icon URIs, and label colors
+- The backup includes everything: notes (with full rich text formatting), lists, whiteboards, folders, dividers, custom icons (pictures or solid colors), and label colors
 
 **Import:**
 - Choose whether to delete your current data first or keep it and merge
 - Confirm, then pick a `.qnbackup` file
-- Everything is restored — folders, notes, lists, whiteboards, dividers, photos and all
+- Everything is restored — folders, notes, lists, whiteboards, dividers, photos, icons and label colors
+- Backups from older versions of the app are still supported
 
 ---
 
@@ -132,5 +146,6 @@ If you just want to try the app without building it yourself:
 - Uses Room for local database storage
 - MVVM architecture (ViewModel + LiveData)
 - Material 3 design
+- Rich text serialized as compact JSON (bold, italic, underline, font size, text color, highlight color)
 - Backup/restore uses plain JSON (no external dependencies)
 - Minimum Android version: Android 8.0 (API 26)

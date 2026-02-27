@@ -128,19 +128,7 @@ class MainActivity : AppCompatActivity() {
         pendingIconFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconFolderId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
         pendingIconListId?.let { viewModel.updateListIcon(it, uri.toString()); pendingIconListId = null }
-        // Refresh from DB after write so the new icon shows immediately
-        lifecycleScope.launch {
-            kotlinx.coroutines.delay(150) // let Room finish the write
-            val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
-            val items = buildHomeList(
-                db.folderDao().getAllFoldersDirect(),
-                db.noteDao().getAllNotesDirect(),
-                db.whiteboardDao().getAllWhiteboardsDirect(),
-                db.noteListDao().getAllListsDirect(),
-                db.dividerDao().getAllDividersDirect()
-            )
-            adapter.forceRefresh(items)
-        }
+        // LiveData observers fire when Room commits → refreshHomeList() with correct data
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -363,8 +351,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Skip the DB read if we're returning from the icon picker —
-        // the pickIcon callback handles the refresh itself after the write.
+        // Skip the stale DB read when returning from the icon picker —
+        // the LiveData observer fires after Room commits and delivers fresh data.
         if (returningFromIconPicker) return
         if (!isDragging) {
             lifecycleScope.launch {
@@ -484,6 +472,7 @@ class MainActivity : AppCompatActivity() {
     private fun showNewDividerDialog(folderId: Int?) {
         val editText = android.widget.EditText(this).apply {
             hint = "Label (optional)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setBackgroundResource(0)
             setPadding(48, 24, 48, 8)
         }
@@ -504,6 +493,7 @@ class MainActivity : AppCompatActivity() {
         val editText = android.widget.EditText(this).apply {
             setText(divider.label)
             hint = "Label (optional)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setBackgroundResource(0)
             setPadding(48, 24, 48, 8)
         }

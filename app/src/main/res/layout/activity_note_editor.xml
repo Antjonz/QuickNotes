@@ -44,61 +44,148 @@
             android:background="@android:color/transparent" />
 
         <!-- Formatting toolbar -->
-        <LinearLayout
+        <HorizontalScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp">
+            android:layout_height="48dp"
+            android:scrollbars="none"
+            android:fadeScrollbars="true"
+            android:fillViewport="false">
 
-            <Button
-                android:id="@+id/btnBold"
-                style="@style/Widget.AppCompat.Button.Borderless"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginEnd="4dp"
-                android:text="B"
-                android:textStyle="bold"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="0dp"
-                android:background="@drawable/bg_format_button"
-                android:textColor="@color/format_button_text" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
 
-            <Button
-                android:id="@+id/btnItalic"
-                style="@style/Widget.AppCompat.Button.Borderless"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginEnd="4dp"
-                android:text="I"
-                android:textStyle="italic"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="0dp"
-                android:background="@drawable/bg_format_button"
-                android:textColor="@color/format_button_text" />
+                <!-- Bold -->
+                <Button
+                    android:id="@+id/btnBold"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="B"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text" />
 
-            <Button
-                android:id="@+id/btnUnderline"
-                style="@style/Widget.AppCompat.Button.Borderless"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:text="U"
-                android:textSize="14sp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="0dp"
-                android:background="@drawable/bg_format_button"
-                android:textColor="@color/format_button_text" />
+                <!-- Italic -->
+                <Button
+                    android:id="@+id/btnItalic"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="I"
+                    android:textStyle="italic"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text" />
 
-        </LinearLayout>
+                <!-- Underline -->
+                <Button
+                    android:id="@+id/btnUnderline"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="U"
+                    android:textSize="14sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text" />
 
-        <EditText
+                <!-- Spacer -->
+                <Space android:layout_width="12dp" android:layout_height="40dp" />
+
+                <!-- Font size (D/S/N/L/H) -->
+                <Button
+                    android:id="@+id/btnTextSize"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="D"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text"
+                    android:contentDescription="Text size" />
+
+                <!-- Letter color (A with coloured bar) -->
+                <ImageButton
+                    android:id="@+id/btnTextColor"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:src="@drawable/ic_text_color"
+                    android:background="@drawable/bg_format_button"
+                    android:scaleType="centerInside"
+                    android:padding="6dp"
+                    android:contentDescription="Text color" />
+
+                <!-- Bar / highlight color -->
+                <ImageButton
+                    android:id="@+id/btnTextHighlight"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_text_highlight"
+                    android:background="@drawable/bg_format_button"
+                    android:scaleType="centerInside"
+                    android:padding="6dp"
+                    android:contentDescription="Text highlight" />
+
+                <!-- Spacer -->
+                <Space android:layout_width="12dp" android:layout_height="40dp" />
+
+                <!-- Special characters / icon -->
+                <Button
+                    android:id="@+id/btnSpecialChar"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="✓"
+                    android:textSize="16sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text"
+                    android:contentDescription="Special characters" />
+
+                <!-- Tab -->
+                <Button
+                    android:id="@+id/btnTab"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="↹"
+                    android:textSize="18sp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="0dp"
+                    android:background="@drawable/bg_format_button"
+                    android:textColor="@color/format_button_text"
+                    android:contentDescription="Tab" />
+
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <com.anton.quicknotes2.TabEditText
             android:id="@+id/editBody"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -106,7 +193,6 @@
             android:background="@null"
             android:gravity="top"
             android:hint="@string/body_hint"
-            android:inputType="textCapSentences|textMultiLine"
             android:padding="16dp"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
 

@@ -38,6 +38,7 @@ class FolderActivity : AppCompatActivity() {
     private lateinit var adapter: FolderAdapter
     private var folderId: Int = -1
     private var isDragging = false
+    private var returningFromIconPicker = false
     private var pendingIconNoteId: Int? = null
     private var pendingIconWhiteboardId: Int? = null
     private var pendingIconSubFolderId: Int? = null
@@ -87,12 +88,15 @@ class FolderActivity : AppCompatActivity() {
     }
 
     private val pickIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        returningFromIconPicker = false
         if (uri == null) return@registerForActivityResult
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         pendingIconNoteId?.let { viewModel.updateNoteIcon(it, uri.toString()); pendingIconNoteId = null }
         pendingIconWhiteboardId?.let { viewModel.updateWhiteboardIcon(it, uri.toString()); pendingIconWhiteboardId = null }
         pendingIconSubFolderId?.let { viewModel.updateFolderIcon(it, uri.toString()); pendingIconSubFolderId = null }
         pendingIconListId?.let { viewModel.updateListIcon(it, uri.toString()); pendingIconListId = null }
+        // LiveData observers (getNotesInFolder / getWhiteboardsInFolder / etc.) will fire
+        // when Room commits the update and call refresh() with correct fresh data.
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,7 +126,7 @@ class FolderActivity : AppCompatActivity() {
             onOrderChanged = { notes -> viewModel.reorderNotesInFolder(notes) },
             onNoteIconClick = { note ->
                 showIconOptionsDialog(
-                    onPickImage = { pendingIconNoteId = note.id; pickIcon.launch("image/*") },
+                    onPickImage = { returningFromIconPicker = true; pendingIconNoteId = note.id; pickIcon.launch("image/*") },
                     onPickColor = { color -> viewModel.updateNoteIcon(note.id, "color:$color") },
                     onResetDefault = { viewModel.updateNoteIcon(note.id, null) },
                     onChangeLabelColor = {
@@ -185,7 +189,7 @@ class FolderActivity : AppCompatActivity() {
             },
             onListIconClick = { list ->
                 showIconOptionsDialog(
-                    onPickImage = { pendingIconListId = list.id; pickIcon.launch("image/*") },
+                    onPickImage = { returningFromIconPicker = true; pendingIconListId = list.id; pickIcon.launch("image/*") },
                     onPickColor = { color -> viewModel.updateListIcon(list.id, "color:$color") },
                     onResetDefault = { viewModel.updateListIcon(list.id, null) },
                     onChangeLabelColor = {
@@ -352,6 +356,7 @@ class FolderActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (returningFromIconPicker) return
         if (!isDragging) {
             lifecycleScope.launch {
                 val db = com.anton.quicknotes2.data.NoteDatabase.getDatabase(applicationContext)
@@ -468,6 +473,7 @@ class FolderActivity : AppCompatActivity() {
     private fun showNewDividerDialog() {
         val editText = android.widget.EditText(this).apply {
             hint = "Label (optional)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setBackgroundResource(0)
             setPadding(48, 24, 48, 8)
         }
@@ -488,6 +494,7 @@ class FolderActivity : AppCompatActivity() {
         val editText = android.widget.EditText(this).apply {
             setText(divider.label)
             hint = "Label (optional)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setBackgroundResource(0)
             setPadding(48, 24, 48, 8)
         }
