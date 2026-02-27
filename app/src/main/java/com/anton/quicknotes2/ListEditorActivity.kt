@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
@@ -16,6 +17,8 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -133,6 +136,30 @@ class ListEditorActivity : AppCompatActivity() {
         }
 
         binding.fabAddItem.setOnClickListener { addNewRow() }
+
+        // Use WindowInsets to track keyboard height and pad the RecyclerView accordingly
+        val rvDefaultBottomPadding = binding.recyclerView.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navInset = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val keyboardHeight = imeInset.bottom
+            val newBottomPadding = if (keyboardHeight > 0) {
+                keyboardHeight - navInset.bottom + rvDefaultBottomPadding
+            } else {
+                rvDefaultBottomPadding
+            }
+            binding.recyclerView.setPadding(
+                binding.recyclerView.paddingLeft,
+                binding.recyclerView.paddingTop,
+                binding.recyclerView.paddingRight,
+                newBottomPadding
+            )
+            // Scroll focused item into view after padding update
+            if (keyboardHeight > 0) {
+                binding.recyclerView.post { scrollFocusedItemIntoView() }
+            }
+            insets
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -257,6 +284,27 @@ class ListEditorActivity : AppCompatActivity() {
         }
     }
 
+    private fun scrollFocusedItemIntoView() {
+        val focused = currentFocus ?: return
+        var v: View? = focused
+        while (v != null && v.parent !== binding.recyclerView) {
+            v = v.parent as? View
+        }
+        val child = v ?: return
+        val position = binding.recyclerView.getChildAdapterPosition(child)
+        if (position == RecyclerView.NO_ID.toInt()) return
+        val lm = binding.recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val rvRect = Rect()
+        binding.recyclerView.getGlobalVisibleRect(rvRect)
+        val childRect = Rect()
+        child.getGlobalVisibleRect(childRect)
+        // Visible bottom = recycler bottom minus current bottom padding (keyboard area)
+        val visibleBottom = rvRect.bottom - binding.recyclerView.paddingBottom
+        if (childRect.bottom > visibleBottom || childRect.top < rvRect.top) {
+            lm.scrollToPositionWithOffset(position, 16)
+        }
+    }
+
     private fun save() {
         val title = binding.editTitle.text.toString().trim()
         savedTitle = title
@@ -330,7 +378,14 @@ class ListEditorActivity : AppCompatActivity() {
             holder.editText.alpha = if (item.checked) 0.5f else 1f
 
             holder.editText.setOnFocusChangeListener { _, hasFocus ->
-                if (!hasFocus) {
+                if (hasFocus) {
+                    val p = holder.bindingAdapterPosition
+                    if (p != RecyclerView.NO_ID.toInt()) {
+                        binding.recyclerView.postDelayed({
+                            scrollFocusedItemIntoView()
+                        }, 100)
+                    }
+                } else {
                     val p = holder.bindingAdapterPosition
                     if (p == RecyclerView.NO_ID.toInt()) return@setOnFocusChangeListener
                     val newText = holder.editText.text.toString()
